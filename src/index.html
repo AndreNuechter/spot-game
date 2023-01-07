@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#000" />
+    <meta name="description" content="A retro-game pwa">
+    <link rel="icon" type="image/png" href="./images/icons-192.png">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./main.js"></script>
+    <title>The Spot Game</title>
+</head>
+
+<body>
+    <h1>Spot 1Up</h1>
+    <main>
+        <div class="plr-slct">
+            <div id="plr1" class="slct"
+                style="border: 2px solid var(--player-color-1); border-radius: 5%; width: 32px; text-align: center; background: beige; color: var(--player-color-1)">
+                <i class="fas fa-user"></i>
+                <div></div>
+            </div>
+            <div id="plr4" class="slct"
+                style="border: 2px solid var(--player-color-4); border-radius: 5%; width: 32px; text-align: center; background: beige; color: var(--player-color-4)">
+                <i class="fas"></i>
+                <div></div>
+            </div>
+        </div>
+
+        <div style="position:relative;">
+            <div id="game-over-indicator">Game Over</div>
+            <svg id="board"></svg>
+            <button id="start">Begin Game</button>
+        </div>
+
+        <div class="plr-slct">
+            <div id="plr2" class="slct"
+                style="border: 2px solid var(--player-color-2); border-radius: 5%; width: 32px; text-align: center; background: beige; color: var(--player-color-2)">
+                <i class="fas"></i>
+                <div></div>
+            </div>
+            <div id="plr3" class="slct"
+                style="border: 2px solid var(--player-color-3); border-radius: 5%; width: 32px; text-align: center; background: beige; color: var(--player-color-3)">
+                <i class="fas"></i>
+                <div></div>
+            </div>
+        </div>
+    </main>
+</body>
+
+</html>
