@@ -18,5 +18,22 @@
                 "no-window-prefix"
             ]
         }
+    },
+    "fmt": {
+        "files": {
+            "include": [
+                "src/"
+            ],
+            "exclude": [
+                "src/manifest.json",
+                "docs/"
+            ]
+        },
+        "options": {
+            "lineWidth": 100,
+            "indentWidth": 4,
+            "singleQuote": true,
+            "proseWrap": "preserve"
+        }
     }
 }

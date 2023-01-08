@@ -12,7 +12,7 @@ self.addEventListener('activate', (event) => {
                 }
                 return true;
             }));
-        })()
+        })(),
     );
 });
 
@@ -25,6 +25,6 @@ self.addEventListener('fetch', (event) => {
             const cache = await self.caches.open(cacheName);
             cache.put(event.request, response.clone());
             return response;
-        })()
+        })(),
     );
 });
