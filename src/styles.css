@@ -1,8 +1,14 @@
 body {
-  font-family: cursive;
+  font-family: system-ui;
   margin: 0 auto;
   text-align: center;
   background: beige;
+}
+
+#defs {
+  position: absolute;
+  width: 0;
+  height: 0;
 }
 
 h1 {
@@ -15,7 +21,7 @@ h1 {
 }
 
 main {
-  padding: 16px;
+  padding: 8px;
   display: inline-flex;
   flex-direction: row;
   border: 2px solid black;
@@ -40,6 +46,14 @@ main {
 #plr2 { --player-color: #ff5050; }
 #plr3 { --player-color: #ff9900; }
 #plr4 { --player-color: #009900; }
+
+.player-icon {
+  margin-top: 8px;
+  width: 16px;
+  height: 16px;
+  fill: var(--player-color);
+  stroke-width: 0.7;
+}
 
 .slct {
   height: 75px;
@@ -73,13 +87,19 @@ main {
 }
 
 #board {
-  margin: 40px 16px 8px 16px;
+  margin: 40px 6px 8px;
   border: 2px solid dimgrey;
   border-radius: 5%;
   box-shadow: 1px 1px 2px grey, inset 2px 2px 4px #e6e6e6, inset -2px -2px 4px #bfbfbf;
   background: lightgrey;
   width: 256px;
   height: 256px;
+}
+
+#board circle {
+  fill: beige;
+  stroke: black;
+  stroke-width: 2;
 }
 
 .selected {

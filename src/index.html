@@ -15,33 +15,54 @@
 </head>
 
 <body>
-    <h1>Spot 1Up</h1>
+    <svg id="defs">
+        <symbol id="human-player" viewBox="0 2 12 12">
+            <circle cx="6" cy="6" r="2"></circle>
+            <rect x="2" y="8.5" width="8" height="15" rx="2"></rect>
+        </symbol>
+        <symbol id="ai-player" viewBox="0 0 4 4">
+            <circle cx="2" cy="2" r="1.5"></circle>
+        </symbol>
+        <symbol id="no-player" viewBox="0 0 4 4">
+            <line x1="0.5" x2="3.5" y1="2" y2="2" style="stroke: var(--player-color);"></line>
+        </symbol>
+    </svg>
+
+    <h1>The Spot Game</h1>
     <main>
         <div class="plr-slct">
             <div id="plr1" class="slct">
-                <i class="fas fa-user"></i>
-                <div></div>
+                <svg class="player-icon">
+                    <use href="#human-player"></use>
+                </svg>
+                <div class="piece-count"></div>
             </div>
-            <div id="plr4" class="slct">
-                <i class="fas"></i>
-                <div></div>
+            <div id="plr3" class="slct">
+                <svg class="player-icon">
+                    <use href="#no-player"></use>
+                </svg>
+                <div class="piece-count"></div>
             </div>
         </div>
 
         <div style="position:relative;">
             <div id="game-over-indicator">Game Over</div>
             <svg id="board"></svg>
-            <button id="start">Begin Game</button>
+            <button id="start">Start Game</button>
         </div>
 
         <div class="plr-slct">
             <div id="plr2" class="slct">
-                <i class="fas"></i>
-                <div></div>
+                <svg class="player-icon">
+                    <use href="#no-player"></use>
+                </svg>
+                <div class="piece-count"></div>
             </div>
-            <div id="plr3" class="slct">
-                <i class="fas"></i>
-                <div></div>
+            <div id="plr4" class="slct">
+                <svg class="player-icon">
+                    <use href="#ai-player"></use>
+                </svg>
+                <div class="piece-count"></div>
             </div>
         </div>
     </main>

@@ -392,24 +392,32 @@ window.addEventListener('DOMContentLoaded', () => {
         move();
     }
 
-    function changeRole(plr) {
-        const i = plr.id.slice(-1) - 1;
-        plr.onclick = () => {
-            switch (plrs[i].state) {
+    const playerCssClasses = {
+        human: '#human-player',
+        ai: '#ai-player',
+        none: '#no-player'
+    };
+
+    function changeRole(playerSelect) {
+        const player = players[playerSelect.id.slice(-1) - 1];
+
+        playerSelect.onclick = () => {
+            if (mainClassList.contains('game-is-running')) {
+                resetBoard();
+            }
+
+            switch (player.state) {
                 case 'inactive':
-                    plr.children[0].classList.remove('fa-robot');
-                    plr.children[0].classList.add('fa-robot');
-                    plrs[i].state = 'robot';
+                    playerSelect.children[0].firstElementChild.setAttribute('href', playerCssClasses.ai);
+                    player.state = 'robot';
                     break;
                 case 'robot':
-                    plr.children[0].classList.remove('fa-robot');
-                    plr.children[0].classList.add('fa-user');
-                    plrs[i].state = 'user';
+                    playerSelect.children[0].firstElementChild.setAttribute('href', playerCssClasses.human);
+                    player.state = 'user';
                     break;
                 case 'user':
-                    plr.children[0].classList.remove('fa-robot');
-                    plr.children[0].classList.add('fa-inactive');
-                    plrs[i].state = 'inactive';
+                    playerSelect.children[0].firstElementChild.setAttribute('href', playerCssClasses.none);
+                    player.state = 'inactive';
                     break;
             }
         };
