@@ -31,39 +31,39 @@
     <h1>The Spot Game</h1>
     <main>
         <div class="plr-slct">
-            <div id="plr1" class="slct">
+            <button id="plr1" class="slct">
                 <svg class="player-icon">
                     <use href="#human-player"></use>
                 </svg>
                 <div class="piece-count"></div>
-            </div>
-            <div id="plr3" class="slct">
+            </button>
+            <button id="plr3" class="slct">
                 <svg class="player-icon">
                     <use href="#no-player"></use>
                 </svg>
                 <div class="piece-count"></div>
-            </div>
+            </button>
         </div>
 
-        <div style="position:relative;">
-            <div id="game-over-indicator">Game Over</div>
+        <div id="board-container">
             <svg id="board"></svg>
             <button id="start">Start Game</button>
+            <div id="game-over-indicator">Game Over</div>
         </div>
 
         <div class="plr-slct">
-            <div id="plr2" class="slct">
+            <button id="plr2" class="slct">
                 <svg class="player-icon">
                     <use href="#no-player"></use>
                 </svg>
                 <div class="piece-count"></div>
-            </div>
-            <div id="plr4" class="slct">
+            </button>
+            <button id="plr4" class="slct">
                 <svg class="player-icon">
                     <use href="#ai-player"></use>
                 </svg>
                 <div class="piece-count"></div>
-            </div>
+            </button>
         </div>
     </main>
 </body>

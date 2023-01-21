@@ -10,6 +10,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const startBtn = getElementById('start');
     const boardLen = 7;
     const board = new Array(Math.pow(boardLen, 2)).fill(0);
+    const mainClassList = document.querySelector('main').classList;
     const boardObject = getElementById('board');
     const playerSelects = getElementByClass('slct');
     const players = [
@@ -50,16 +51,7 @@ window.addEventListener('DOMContentLoaded', () => {
         changeRole(playerSelect);
     }
 
-    function resetBoard() {
-        startBtn.innerText = 'Start Game';
-        mainClassList.remove('game-is-running');
-        clearBoard();
-        turn = undefined;
-    }
-
-    const mainClassList = document.querySelector('main').classList;
-
-    startBtn.onclick = () => {
+    startBtn.addEventListener('click', () => {
         if (!mainClassList.contains('game-is-running')) {
             startBtn.innerText = 'Restart Game';
             mainClassList.add('game-is-running');
@@ -73,7 +65,14 @@ window.addEventListener('DOMContentLoaded', () => {
         }, []);
         turn = 0;
         setBoard(idsOfActivePlayers);
-    };
+    });
+
+    function resetBoard() {
+        startBtn.innerText = 'Start Game';
+        mainClassList.remove('game-is-running');
+        clearBoard();
+        turn = undefined;
+    }
 
     function Player(color, state, start) {
         return { color, state, start, pieces: [] };
@@ -116,12 +115,10 @@ window.addEventListener('DOMContentLoaded', () => {
                 isPieceNotAtRBorder ? piece - 2 * boardLen + 1 : -1,
                 isPieceNotAtRBorder ? piece + 2 * boardLen + 1 : -1,
             ],
-            neighbors = neighborCells.filter(findFreeCells),
+            nextTo = neighborCells.filter(findFreeCells),
             oneOff = cellsOneOff.filter(findFreeCells);
-        return {
-            nextTo: neighbors,
-            oneOff: oneOff,
-        };
+
+            return { nextTo, oneOff };
     }
 
     function findFreeCells(val) {
@@ -141,20 +138,24 @@ window.addEventListener('DOMContentLoaded', () => {
                 isPieceNotAtRBorder ? piece + boardLen + 1 : -1,
                 piece + boardLen,
             ];
+
         return neighborCells.filter((cell) =>
-            0 <= cell && cell < board.length && board[cell] !== 0 &&
-            board[cell] !== idsOfActivePlayers[turn] + 1
+            0 <= cell
+            && cell < board.length
+            && board[cell] !== 0
+            && board[cell] !== idsOfActivePlayers[turn] + 1
         );
     }
 
     function clearCell(cell) {
         board[cell] = 0;
         boardCells[cell].style.fill = 'beige';
-        boardCells[cell].classList = boardCells[cell].onclick = '';
+        boardCells[cell].classList = '';
+        boardCells[cell].onclick = null;
     }
 
     function clearBoard() {
-        gameOverModal.style.zIndex = -1;
+        gameOverModal.classList.remove('visible');
         players.forEach((plr, i) => {
             plr.pieces.length = 0;
             getElementById(`plr${i + 1}`).children[1].textContent = '';
@@ -213,7 +214,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 .forEach(({ playerId }, i) => {
                     getElementById(`plr${playerId}`).children[1].textContent = getPlaceStr(i);
                 });
-            gameOverModal.style.zIndex = 1;
+            gameOverModal.classList.add('visible');
             document.querySelector('main').classList.remove('game-is-running');
         } else {
             move();
@@ -235,13 +236,13 @@ window.addEventListener('DOMContentLoaded', () => {
                     humanMove(options);
                     // remove listeners for move and cursor-highlighting
                     [...option.moves.nextTo, ...option.moves.oneOff].forEach((e) => {
-                        boardCells[e].onclick = '';
+                        boardCells[e].onclick = null;
                         boardCells[e].style.cursor = 'initial';
                     });
                 } else {
                     const helper = (e) => {
                         [...option.moves.nextTo, ...option.moves.oneOff].forEach((e2) => {
-                            boardCells[e2].onclick = '';
+                            boardCells[e2].onclick = null;
                             boardCells[e2].style.cursor = 'initial';
                         });
                         board[e] = idsOfActivePlayers[turn] + 1;
@@ -265,7 +266,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     // remove eventlisteners and cursor-highlighting from other possible selection targets
                     plr.pieces.forEach((j) => {
                         if (j !== option.piece) {
-                            boardCells[j].onclick = '';
+                            boardCells[j].onclick = null;
                             boardCells[j].style.cursor = 'initial';
                         }
                     });
@@ -273,7 +274,8 @@ window.addEventListener('DOMContentLoaded', () => {
                     option.moves.nextTo.forEach((e) => {
                         boardCells[e].style.cursor = 'pointer';
                         boardCells[e].onclick = () => {
-                            boardCells[option.piece].onclick = boardCells[option.piece].classList = '';
+                            boardCells[option.piece].onclick = null;
+                            boardCells[option.piece].classList = '';
                             boardCells[option.piece].style.cursor = 'initial';
                             plr.pieces.push(e);
                             helper(e);
