@@ -44,7 +44,6 @@ main {
   background: white;
   width: 100%;
   border-inline: 0;
-  transform: translateY(40%);
   margin: 0 auto;
 }
 
