@@ -2,24 +2,28 @@ import './js/service-worker-init.js';
 import './js/wakelock.js';
 
 // TODO rework colors (see manifest and index.html too)
-// TODO refactor...rm inline styles, rm compound assignments, 
+// TODO refactor...rm inline styles
 
 window.addEventListener('DOMContentLoaded', () => {
     const getElementById = (id) => document.getElementById(id);
-    const getElementByClass = (cls) => document.getElementsByClassName(cls);
     const startBtn = getElementById('start');
     const boardLen = 7;
+    /** 0 means a cell is unoccupied and otherwise the cell belongs to the player w that id */
     const board = new Array(Math.pow(boardLen, 2)).fill(0);
     const mainClassList = document.querySelector('main').classList;
     const boardObject = getElementById('board');
-    const playerSelects = getElementByClass('slct');
     const players = [
         // TODO colors are duplicated in css
-        new Player('#3399ff', 'user', 0),
-        new Player('#ff5050', 'inactive', boardLen - 1),
-        new Player('#ff9900', 'inactive', Math.pow(boardLen, 2) - boardLen),
-        new Player('#009900', 'robot', Math.pow(boardLen, 2) - 1),
+        new Player('#3399ff', 'user', 0, 1),
+        new Player('#ff5050', 'inactive', boardLen - 1, 2),
+        new Player('#ff9900', 'inactive', Math.pow(boardLen, 2) - boardLen, 3),
+        new Player('#009900', 'robot', Math.pow(boardLen, 2) - 1, 4),
     ];
+    const playerIconIds = {
+        human: '#human-player',
+        ai: '#ai-player',
+        none: '#no-player'
+    };
     const gameOverModal = getElementById('game-over-indicator');
     const boardCells = [];
     const boardWidth = 7;
@@ -28,6 +32,7 @@ window.addEventListener('DOMContentLoaded', () => {
         'http://www.w3.org/2000/svg',
         'circle',
     );
+    /** List of 1-based ids of playing players */
     let idsOfActivePlayers;
     let turn;
 
@@ -45,37 +50,42 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     boardObject.append(...boardCells);
-
     // register eventlisteners for player-selection
-    for (let playerSelect of playerSelects) {
-        changeRole(playerSelect);
-    }
+    players.forEach(changePlayerRole);
 
     startBtn.addEventListener('click', () => {
         if (!mainClassList.contains('game-is-running')) {
-            startBtn.innerText = 'Restart Game';
+            startBtn.textContent = 'Restart Game';
             mainClassList.add('game-is-running');
         }
 
-        idsOfActivePlayers = players.reduce((ids, currentPlayer, i) => {
-            if (currentPlayer.state !== 'inactive') {
-                ids.push(i);
+        idsOfActivePlayers = players.reduce((ids, player) => {
+            if (player.state !== 'inactive') {
+                ids.push(player.playerId);
             }
             return ids;
         }, []);
         turn = 0;
-        setBoard(idsOfActivePlayers);
+        setBoard();
     });
 
     function resetBoard() {
-        startBtn.innerText = 'Start Game';
+        startBtn.textContent = 'Start Game';
         mainClassList.remove('game-is-running');
         clearBoard();
+        players.forEach(p => p.roleChangeButton.classList.remove('active'));
         turn = undefined;
     }
 
-    function Player(color, state, start) {
-        return { color, state, start, pieces: [] };
+    function Player(color, state, start, playerId) {
+        return {
+            color,
+            state,
+            start,
+            playerId,
+            pieces: [],
+            roleChangeButton: getElementById(`plr${playerId}`)
+        };
     }
 
     function getRandomInt(min, max) {
@@ -83,11 +93,11 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     function getMoves(piece) {
-        const isPieceNotAtLBorder = piece % boardLen > 0,
-            isPieceNotAtRBorder = piece % boardLen < 6,
-            isPieceNotByLBorder = piece % boardLen > 1,
-            isPieceNotByRBorder = piece % boardLen < 5,
-            neighborCells = [
+        const isPieceNotAtLBorder = piece % boardLen > 0;
+        const isPieceNotAtRBorder = piece % boardLen < 6;
+        const isPieceNotByLBorder = piece % boardLen > 1;
+        const isPieceNotByRBorder = piece % boardLen < 5;
+        const neighborCells = [
                 isPieceNotAtLBorder ? piece - 1 : -1,
                 isPieceNotAtLBorder ? piece - boardLen - 1 : -1,
                 isPieceNotAtLBorder ? piece + boardLen - 1 : -1,
@@ -96,8 +106,8 @@ window.addEventListener('DOMContentLoaded', () => {
                 isPieceNotAtRBorder ? piece + 1 : -1,
                 isPieceNotAtRBorder ? piece + boardLen + 1 : -1,
                 piece + boardLen,
-            ],
-            cellsOneOff = [
+            ];
+        const cellsOneOff = [
                 isPieceNotAtLBorder && isPieceNotByLBorder ? piece - 2 : -1,
                 isPieceNotAtLBorder && isPieceNotByLBorder ? piece - boardLen - 2 : -1,
                 isPieceNotAtLBorder && isPieceNotByLBorder ? piece - 2 * boardLen - 2 : -1,
@@ -114,11 +124,11 @@ window.addEventListener('DOMContentLoaded', () => {
                 isPieceNotAtRBorder && isPieceNotByRBorder ? piece + 2 * boardLen + 2 : -1,
                 isPieceNotAtRBorder ? piece - 2 * boardLen + 1 : -1,
                 isPieceNotAtRBorder ? piece + 2 * boardLen + 1 : -1,
-            ],
-            nextTo = neighborCells.filter(findFreeCells),
-            oneOff = cellsOneOff.filter(findFreeCells);
+            ];
+        const nextTo = neighborCells.filter(findFreeCells);
+        const oneOff = cellsOneOff.filter(findFreeCells);
 
-            return { nextTo, oneOff };
+        return { nextTo, oneOff };
     }
 
     function findFreeCells(val) {
@@ -126,9 +136,9 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     function getEnemyNeighbors(piece) {
-        const isPieceNotAtLBorder = piece % boardLen > 0,
-            isPieceNotAtRBorder = piece % boardLen < 6,
-            neighborCells = [
+        const isPieceNotAtLBorder = piece % boardLen > 0;
+        const isPieceNotAtRBorder = piece % boardLen < 6;
+        const neighborCells = [
                 isPieceNotAtLBorder ? piece - 1 : -1,
                 isPieceNotAtLBorder ? piece - boardLen - 1 : -1,
                 isPieceNotAtLBorder ? piece + boardLen - 1 : -1,
@@ -143,26 +153,24 @@ window.addEventListener('DOMContentLoaded', () => {
             0 <= cell
             && cell < board.length
             && board[cell] !== 0
-            && board[cell] !== idsOfActivePlayers[turn] + 1
+            && board[cell] !== idsOfActivePlayers[turn]
         );
     }
 
-    function clearCell(cell) {
-        board[cell] = 0;
-        boardCells[cell].style.fill = 'beige';
-        boardCells[cell].classList = '';
-        boardCells[cell].onclick = null;
+    function clearCell(cellIndex) {
+        board[cellIndex] = 0;
+        boardCells[cellIndex].style.fill = 'beige';
+        boardCells[cellIndex].classList = '';
+        boardCells[cellIndex].onclick = null;
     }
 
     function clearBoard() {
         gameOverModal.classList.remove('visible');
-        players.forEach((plr, i) => {
+        players.forEach((plr) => {
             plr.pieces.length = 0;
-            getElementById(`plr${i + 1}`).children[1].textContent = '';
+            plr.roleChangeButton.children[1].textContent = '';
         });
-        for (let i = 0; i < boardCells.length; i += 1) {
-            clearCell(i);
-        }
+        boardCells.forEach((_, i) => clearCell(i));
     }
 
     function getPlaceStr(i) {
@@ -179,13 +187,13 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     function endTurn() {
-        if (turn === undefined) { 
+        if (turn === undefined) {
             resetBoard();
             return;
         }
 
         // remove turn highlighting
-        getElementById('plr' + (idsOfActivePlayers[turn] + 1)).classList.remove('active');
+        players[idsOfActivePlayers[turn] - 1].roleChangeButton.classList.remove('active');
 
         // advance turn
         if (turn < idsOfActivePlayers.length - 1) {
@@ -196,23 +204,24 @@ window.addEventListener('DOMContentLoaded', () => {
 
         // adjust piece counts
         idsOfActivePlayers.forEach((playerId) => {
-            getElementById(`plr${playerId + 1}`).children[1].textContent = players[playerId].pieces.length;
+            const player = players[playerId - 1];
+            player.roleChangeButton.children[1].textContent = player.pieces.length;
         });
 
         // stop game when board is full or only one player w pieces remains
         if (
             board.filter((cell) => cell === 0).length === 0 ||
-            players.filter((e) => e.pieces.length > 0).length <= 1
+            players.filter((player) => player.pieces.length > 0).length <= 1
         ) {
             // rank players and communicate end of game
             idsOfActivePlayers
                 .map((id) => ({
-                    playerId: id + 1,
-                    pieces: players[id].pieces.length
+                    playerId: id,
+                    pieces: players[id - 1].pieces.length
                 }))
                 .sort(({ pieces: a }, { pieces: b }) => b - a)
                 .forEach(({ playerId }, i) => {
-                    getElementById(`plr${playerId}`).children[1].textContent = getPlaceStr(i);
+                    players[playerId - 1].roleChangeButton.children[1].textContent = getPlaceStr(i);
                 });
             gameOverModal.classList.add('visible');
             document.querySelector('main').classList.remove('game-is-running');
@@ -221,10 +230,10 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function humanMove(options) {
-        const plr = players[idsOfActivePlayers[turn]];
+    function humanMove(possibleMoves) {
+        const plr = players[idsOfActivePlayers[turn] - 1];
         // allow selection of a piece
-        options.forEach((option) => {
+        possibleMoves.forEach((option) => {
             // change cursor for selectable pieces
             boardCells[option.piece].style.cursor = 'pointer';
             boardCells[option.piece].onclick = () => {
@@ -233,19 +242,20 @@ window.addEventListener('DOMContentLoaded', () => {
                     // remove highlighting
                     boardCells[option.piece].classList.remove('selected');
                     // re-allow selection
-                    humanMove(options);
+                    humanMove(possibleMoves);
                     // remove listeners for move and cursor-highlighting
                     [...option.moves.nextTo, ...option.moves.oneOff].forEach((e) => {
                         boardCells[e].onclick = null;
                         boardCells[e].style.cursor = 'initial';
                     });
                 } else {
+                    // TODO rename this. it helps w what?
                     const helper = (e) => {
                         [...option.moves.nextTo, ...option.moves.oneOff].forEach((e2) => {
                             boardCells[e2].onclick = null;
                             boardCells[e2].style.cursor = 'initial';
                         });
-                        board[e] = idsOfActivePlayers[turn] + 1;
+                        board[e] = idsOfActivePlayers[turn];
                         boardCells[e].style.fill = plr.color;
                         // check for neigbouring enemy pieces and turn them over
                         getEnemyNeighbors(e).forEach((gained) => {
@@ -255,7 +265,7 @@ window.addEventListener('DOMContentLoaded', () => {
                                 ...owner.pieces.splice(owner.pieces.indexOf(gained), 1),
                             );
                             // update internal board state
-                            board[gained] = idsOfActivePlayers[turn] + 1;
+                            board[gained] = idsOfActivePlayers[turn];
                             // update display
                             boardCells[gained].style.fill = plr.color;
                         });
@@ -297,16 +307,19 @@ window.addEventListener('DOMContentLoaded', () => {
 
     function wait(ms) {
         return new Promise((r) => setTimeout(r, ms));
-    } 
+    }
 
-    async function machineMove(options) {
-        const plr = players[idsOfActivePlayers[turn]],
-            payoffs = [];
-        let most = [0, []],
-            secMost = [],
-            thrdMost;
+    // FIXME restarting a game or changing a player role while a move is in progress can cause the move to happen in the next game (adding unwarranted pieces into the game) or on a blank board (which is cleaned up, but still)
+    async function machineMove(possibleMoves) {
+        const plr = players[idsOfActivePlayers[turn] - 1];
+        const payoffs = [];
+        let most = [0, []];
+        let secMost = [];
+        let thrdMost;
+        let candidates;
+
         // get payoffs
-        options.forEach((o) => {
+        possibleMoves.forEach((o) => {
             payoffs.push({
                 next: o.moves.nextTo.map((closeNeighbor) => ({
                     origin: o.piece,
@@ -345,9 +358,9 @@ window.addEventListener('DOMContentLoaded', () => {
                 } else if (most[0] === n.bounty.length + n.type) most[1].push(n);
             });
         });
+
         // Randomnly pick one of the three highest payoffs (w strong bias towards highest)
         // There can be 1 (secMost[0] === 0), 2 (secMost[0] !== 0 && thrdMost[0] === 0) and 3 highest payoffs, here mapped to distributions of [1], [.9, .1], [.9, .09, .01].
-        let candidates;
         if (secMost[0] === 0) {
             candidates = most;
         } else if (secMost[0] !== 0 && thrdMost[0] === 0) {
@@ -360,9 +373,11 @@ window.addEventListener('DOMContentLoaded', () => {
             else if (dice > 0.01) candidates = secMost;
             else candidates = thrdMost;
         }
+
         // Randomnly pick one of the moves leading to chosen payoff
-        const id = getRandomInt(0, candidates[1].length - 1),
-            move = candidates[1][id];
+        const id = getRandomInt(0, candidates[1].length - 1);
+        const move = candidates[1][id];
+
         // wait a bit and highlight selected piece
         await wait(200);
         boardCells[move.origin].classList.add('selected');
@@ -380,75 +395,79 @@ window.addEventListener('DOMContentLoaded', () => {
                 plr.pieces.push(...owner.pieces.splice(owner.pieces.indexOf(cell), 1));
             }
             // Update board and display
-            board[cell] = idsOfActivePlayers[turn] + 1;
+            board[cell] = idsOfActivePlayers[turn];
             boardCells[cell].style.fill = plr.color;
         });
         // wait again and undo highlighting of move
         await wait(200);
         boardCells[move.origin].classList.remove('selected');
         boardCells[move.target].style.stroke = 'black';
+
         // when jumped, remove piece from origin
         if (move.type === 0) {
             clearCell(move.origin);
             plr.pieces.splice(plr.pieces.indexOf(move.origin), 1);
         }
+
         endTurn();
     }
 
     function move() {
         if (turn === undefined) return;
-        // highlight active player
-        getElementById('plr' + (idsOfActivePlayers[turn] + 1)).classList.add('active');
-        // go thru players' pieces, see if there're moves and bundle em up for later use
-        const plr = players[idsOfActivePlayers[turn]],
-            options = plr.pieces
-                .map((piece) => ({ piece: piece, moves: getMoves(piece) }))
-                .filter((option) =>
-                    option.moves.nextTo.length > 0 || option.moves.oneOff.length > 0
-                );
 
-        if (options.length === 0) endTurn();
-        else if (plr.state === 'user') humanMove(options);
-        else if (plr.state === 'robot') machineMove(options);
+        const plr = players[idsOfActivePlayers[turn] - 1];
+        const possibleMoves = plr.pieces
+            .map((piece) => ({ piece: piece, moves: getMoves(piece) }))
+            .filter((option) =>
+                option.moves.nextTo.length > 0 || option.moves.oneOff.length > 0
+            );
+
+        // highlight active player
+        plr.roleChangeButton.classList.add('active');
+
+        if (possibleMoves.length === 0) {
+            endTurn();
+        } else if (plr.state === 'user') {
+            humanMove(possibleMoves);
+        } else if (plr.state === 'robot') {
+            machineMove(possibleMoves);
+        }
     }
 
-    function setBoard(actives) {
-        if (actives.length < 2) return;
+    function setBoard() {
+        if (idsOfActivePlayers.length < 2) return;
+
         clearBoard();
-        actives.forEach((e) => {
-            boardCells[players[e].start].style.fill = players[e].color;
-            players[e].pieces.push(players[e].start);
-            board[players[e].start] = e + 1;
-            getElementById('plr' + (e + 1)).children[1].textContent = players[e].pieces.length;
+        idsOfActivePlayers.forEach((idOfActivePlayer) => {
+            const player = players[idOfActivePlayer - 1];
+
+            boardCells[player.start].style.fill = player.color;
+            board[player.start] = idOfActivePlayer;
+            player.pieces.push(player.start);
+            player.roleChangeButton.children[1].textContent = player.pieces.length;
         });
         move();
     }
 
-    const playerCssClasses = {
-        human: '#human-player',
-        ai: '#ai-player',
-        none: '#no-player'
-    };
+    function changePlayerRole(player) {
+        const roleChangeButton = player.roleChangeButton;
 
-    function changeRole(playerSelect) {
-        const player = players[playerSelect.id.slice(-1) - 1];
-
-        playerSelect.onclick = () => {
+        roleChangeButton.onclick = () => {
             if (mainClassList.contains('game-is-running')) {
                 resetBoard();
             }
 
             switch (player.state) {
                 case 'inactive':
-                    playerSelect.children[0].firstElementChild.setAttribute('href', playerCssClasses.ai);
+                    roleChangeButton.children[0].firstElementChild.setAttribute('href', playerIconIds.ai);
                     player.state = 'robot';
                     break;
                 case 'robot':
-                    playerSelect.children[0].firstElementChild.setAttribute('href', playerCssClasses.human);
+                    roleChangeButton.children[0].firstElementChild.setAttribute('href', playerIconIds.human);
                     player.state = 'user';
                     break;
                 case 'user':
-                    playerSelect.children[0].firstElementChild.setAttribute('href', playerCssClasses.none);
+                    roleChangeButton.children[0].firstElementChild.setAttribute('href', playerIconIds.none);
                     player.state = 'inactive';
                     break;
             }
