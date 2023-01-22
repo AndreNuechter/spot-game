@@ -1,8 +1,9 @@
 import './js/service-worker-init.js';
 import './js/wakelock.js';
 
-// TODO rework colors (see manifest and index.html too)
+// TODO rework colors
 // TODO refactor...rm inline styles
+// TODO stashing in deploy is anoying as the stash is not reapllied (how would we ensure there has been one created and we're in fact restoring that?)
 
 window.addEventListener('DOMContentLoaded', () => {
     const getElementById = (id) => document.getElementById(id);
@@ -27,7 +28,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const gameOverModal = getElementById('game-over-indicator');
     const boardCells = [];
     const boardWidth = 7;
-    const cellSize = 32;
+    const cellSize = 36;
     const circleTmpl = document.createElementNS(
         'http://www.w3.org/2000/svg',
         'circle',
@@ -36,14 +37,14 @@ window.addEventListener('DOMContentLoaded', () => {
     let idsOfActivePlayers;
     let turn;
 
-    circleTmpl.setAttribute('r', '13');
+    circleTmpl.setAttribute('r', '16');
 
-    for (let i = 1; i <= boardWidth; i += 1) {
-        for (let j = 1; j <= boardWidth; j += 1) {
+    for (let i = 0; i < boardWidth; i += 1) {
+        for (let j = 0; j < boardWidth; j += 1) {
             const circle = circleTmpl.cloneNode(true);
 
-            circle.setAttribute('cx', cellSize * j);
-            circle.setAttribute('cy', cellSize * i);
+            circle.setAttribute('cx', cellSize * j + (cellSize * 0.5));
+            circle.setAttribute('cy', cellSize * i + (cellSize * 0.5));
 
             boardCells.push(circle);
         }
@@ -54,17 +55,20 @@ window.addEventListener('DOMContentLoaded', () => {
     players.forEach(changePlayerRole);
 
     startBtn.addEventListener('click', () => {
-        if (!mainClassList.contains('game-is-running')) {
-            startBtn.textContent = 'Restart Game';
-            mainClassList.add('game-is-running');
-        }
-
         idsOfActivePlayers = players.reduce((ids, player) => {
             if (player.state !== 'inactive') {
                 ids.push(player.playerId);
             }
             return ids;
         }, []);
+
+        if (idsOfActivePlayers.length < 2) return;
+
+        if (!mainClassList.contains('game-is-running')) {
+            startBtn.textContent = 'Restart Game';
+            mainClassList.add('game-is-running');
+        }
+
         turn = 0;
         setBoard();
     });
@@ -435,8 +439,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     function setBoard() {
-        if (idsOfActivePlayers.length < 2) return;
-
         clearBoard();
         idsOfActivePlayers.forEach((idOfActivePlayer) => {
             const player = players[idOfActivePlayer - 1];
