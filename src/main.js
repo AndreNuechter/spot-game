@@ -2,14 +2,16 @@ import './js/service-worker-init.js';
 import './js/wakelock.js';
 
 // TODO rework colors
-// TODO refactor...rm onclick handler
 // TODO stashing in deploy is anoying as the stash is not reapllied (how would we ensure there has been one created and we're in fact restoring that?)
 
 window.addEventListener('DOMContentLoaded', () => {
     const startBtn = document.getElementById('start');
     const boardLen = 7;
-    /** 0 means a cell is unoccupied and otherwise the cell belongs to the player w that id */
+    /** `boardLen`^2 length array of cellIds meant for keeping track of cell-ownership.
+     * 0 means a cell is unoccupied and otherwise the cell belongs to the player w that id. */
     const board = new Array(Math.pow(boardLen, 2)).fill(0);
+    /** Array of 49 svg-circles forming the board. */
+    const boardCells = [];
     const mainClassList = document.querySelector('main').classList;
     const boardObject = document.getElementById('board');
     const players = [
@@ -33,12 +35,15 @@ window.addEventListener('DOMContentLoaded', () => {
         visible: 'visible',
     };
     const gameOverModal = document.getElementById('game-over-indicator');
-    const boardCells = [];
     const cellSize = 36;
     const circleTmpl = document.createElementNS(
         'http://www.w3.org/2000/svg',
         'circle',
     );
+    const abortControllers = {
+        selectMoveOrigin: new AbortController(),
+        selectMoveTarget: new AbortController()
+    };
     /** List of 1-based ids of playing players */
     let idsOfActivePlayers;
     let turn;
@@ -139,73 +144,76 @@ window.addEventListener('DOMContentLoaded', () => {
 
     function clearBoard() {
         gameOverModal.classList.remove(cssClasses.visible);
-        players.forEach((plr) => {
-            plr.pieces.length = 0;
-            plr.roleChangeButton.children[1].textContent = '';
+        players.forEach((player) => {
+            player.pieces.length = 0;
+            player.roleChangeButton.children[1].textContent = '';
         });
+        abortControllers.selectMoveOrigin.abort();
+        abortControllers.selectMoveTarget.abort();
         boardCells.forEach((_, i) => clearCell(i));
     }
 
     function clearCell(cellId) {
         board[cellId] = 0;
         boardCells[cellId].dataset.ownerId = '';
-        boardCells[cellId].onclick = null;
     }
 
     function move() {
         if (turn === undefined) return;
 
-        const plr = players[idsOfActivePlayers[turn] - 1];
-        const possibleMoves = plr.pieces
-            .map((piece) => ({ pieceId: piece, moves: getMoves(piece) }))
+        const player = players[idsOfActivePlayers[turn] - 1];
+        /** { pieceId: 0-48, moves: { nextTo: [8; 0-48] oneOff: [16; 0-48] }[] }[] */
+        const possibleMoves = player.pieces
+            .map((piece) => ({ pieceId: piece, moves: getPossibleMoves(piece) }))
             .filter((option) =>
                 option.moves.nextTo.length > 0 || option.moves.oneOff.length > 0
             );
 
         // highlight active player
-        plr.roleChangeButton.classList.add(cssClasses.activePlayer);
+        player.roleChangeButton.classList.add(cssClasses.activePlayer);
 
         if (possibleMoves.length === 0) {
             endTurn();
-        } else if (plr.controllerType === 'human') {
+        } else if (player.controllerType === 'human') {
             humanMove(possibleMoves);
-        } else if (plr.controllerType === 'robot') {
+        } else if (player.controllerType === 'robot') {
             machineMove(possibleMoves);
         }
     }
 
-    function getMoves(piece) {
-        const isPieceNotAtLBorder = piece % boardLen > 0;
-        const isPieceNotAtRBorder = piece % boardLen < 6;
-        const isPieceNotByLBorder = piece % boardLen > 1;
-        const isPieceNotByRBorder = piece % boardLen < 5;
+    /** Return an object pointing to two arrays, the first containing cellIds of empty cells directly adjacent to the given piece (max. 8) and the second containing cellIds of empty cells one cell away (max. 16). */
+    function getPossibleMoves(pieceId) {
+        const isPieceNotAtLBorder = pieceId % boardLen > 0;
+        const isPieceNotAtRBorder = pieceId % boardLen < 6;
+        const isPieceNotByLBorder = pieceId % boardLen > 1;
+        const isPieceNotByRBorder = pieceId % boardLen < 5;
         const neighborCells = [
-                isPieceNotAtLBorder ? piece - 1 : -1,
-                isPieceNotAtLBorder ? piece - boardLen - 1 : -1,
-                isPieceNotAtLBorder ? piece + boardLen - 1 : -1,
-                piece - boardLen,
-                isPieceNotAtRBorder ? piece - boardLen + 1 : -1,
-                isPieceNotAtRBorder ? piece + 1 : -1,
-                isPieceNotAtRBorder ? piece + boardLen + 1 : -1,
-                piece + boardLen,
+                isPieceNotAtLBorder ? pieceId - 1 : -1,
+                isPieceNotAtLBorder ? pieceId - boardLen - 1 : -1,
+                isPieceNotAtLBorder ? pieceId + boardLen - 1 : -1,
+                pieceId - boardLen,
+                isPieceNotAtRBorder ? pieceId - boardLen + 1 : -1,
+                isPieceNotAtRBorder ? pieceId + 1 : -1,
+                isPieceNotAtRBorder ? pieceId + boardLen + 1 : -1,
+                pieceId + boardLen,
             ];
         const cellsOneOff = [
-                isPieceNotAtLBorder && isPieceNotByLBorder ? piece - 2 : -1,
-                isPieceNotAtLBorder && isPieceNotByLBorder ? piece - boardLen - 2 : -1,
-                isPieceNotAtLBorder && isPieceNotByLBorder ? piece - 2 * boardLen - 2 : -1,
-                isPieceNotAtLBorder && isPieceNotByLBorder ? piece + 2 * boardLen - 2 : -1,
-                isPieceNotAtLBorder && isPieceNotByLBorder ? piece + boardLen - 2 : -1,
-                isPieceNotAtLBorder ? piece - 2 * boardLen - 1 : -1,
-                isPieceNotAtLBorder ? piece + 2 * boardLen - 1 : -1,
-                piece - 2 * boardLen,
-                piece + 2 * boardLen,
-                isPieceNotAtRBorder && isPieceNotByRBorder ? piece - 2 * boardLen + 2 : -1,
-                isPieceNotAtRBorder && isPieceNotByRBorder ? piece - boardLen + 2 : -1,
-                isPieceNotAtRBorder && isPieceNotByRBorder ? piece + 2 : -1,
-                isPieceNotAtRBorder && isPieceNotByRBorder ? piece + boardLen + 2 : -1,
-                isPieceNotAtRBorder && isPieceNotByRBorder ? piece + 2 * boardLen + 2 : -1,
-                isPieceNotAtRBorder ? piece - 2 * boardLen + 1 : -1,
-                isPieceNotAtRBorder ? piece + 2 * boardLen + 1 : -1,
+                isPieceNotAtLBorder && isPieceNotByLBorder ? pieceId - 2 : -1,
+                isPieceNotAtLBorder && isPieceNotByLBorder ? pieceId - boardLen - 2 : -1,
+                isPieceNotAtLBorder && isPieceNotByLBorder ? pieceId - 2 * boardLen - 2 : -1,
+                isPieceNotAtLBorder && isPieceNotByLBorder ? pieceId + 2 * boardLen - 2 : -1,
+                isPieceNotAtLBorder && isPieceNotByLBorder ? pieceId + boardLen - 2 : -1,
+                isPieceNotAtLBorder ? pieceId - 2 * boardLen - 1 : -1,
+                isPieceNotAtLBorder ? pieceId + 2 * boardLen - 1 : -1,
+                pieceId - 2 * boardLen,
+                pieceId + 2 * boardLen,
+                isPieceNotAtRBorder && isPieceNotByRBorder ? pieceId - 2 * boardLen + 2 : -1,
+                isPieceNotAtRBorder && isPieceNotByRBorder ? pieceId - boardLen + 2 : -1,
+                isPieceNotAtRBorder && isPieceNotByRBorder ? pieceId + 2 : -1,
+                isPieceNotAtRBorder && isPieceNotByRBorder ? pieceId + boardLen + 2 : -1,
+                isPieceNotAtRBorder && isPieceNotByRBorder ? pieceId + 2 * boardLen + 2 : -1,
+                isPieceNotAtRBorder ? pieceId - 2 * boardLen + 1 : -1,
+                isPieceNotAtRBorder ? pieceId + 2 * boardLen + 1 : -1,
             ];
         const nextTo = neighborCells.filter(findFreeCells);
         const oneOff = cellsOneOff.filter(findFreeCells);
@@ -242,11 +250,11 @@ window.addEventListener('DOMContentLoaded', () => {
         ) {
             // rank players and communicate end of game
             idsOfActivePlayers
-                .map((id) => ({
-                    playerId: id,
-                    pieces: players[id - 1].pieces.length
+                .map((playerId) => ({
+                    playerId,
+                    pieceCount: players[playerId - 1].pieces.length
                 }))
-                .sort(({ pieces: a }, { pieces: b }) => b - a)
+                .sort(({ pieceCount: a }, { pieceCount: b }) => b - a)
                 .forEach(({ playerId }, i) => {
                     players[playerId - 1].roleChangeButton.children[1].textContent = getPlaceStr(i);
                 });
@@ -257,130 +265,138 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    /** @param { Object } possibleMoves { pieceId: 0-48, moves: { nextTo: [max. 8; 0-48] oneOff: [max. 16; 0-48] }[] }[] */
     function humanMove(possibleMoves) {
-        const plr = players[idsOfActivePlayers[turn] - 1];
-        // TODO can we use AbortController to rm those listeners all at once?
-        // remove listeners for move and cursor-highlighting
-        const disableClickListener = (possibleMove) => [
-            ...possibleMove.moves.nextTo,
-            ...possibleMove.moves.oneOff
-            ].forEach((cellId) => {
-                boardCells[cellId].onclick = null;
-                boardCells[cellId].classList.remove(cssClasses.clickableCell);
-            });
-        // allow selection of a piece
+        const player = players[idsOfActivePlayers[turn] - 1];
+        
+        Object.assign(abortControllers, {
+            selectMoveOrigin: new AbortController(),
+            selectMoveTarget: new AbortController()
+        });
+
+        // allow selection of movable pieces
         possibleMoves.forEach((possibleMove) => {
-            boardCells[possibleMove.pieceId].classList.add(cssClasses.clickableCell);
-            boardCells[possibleMove.pieceId].onclick = () => {
-                // allow deselection of a piece
-                if (boardCells[possibleMove.pieceId].classList.contains(cssClasses.selectedForMove)) {
-                    // remove highlighting
-                    boardCells[possibleMove.pieceId].classList.remove(cssClasses.selectedForMove);
-                    // re-allow selection
-                    humanMove(possibleMoves);
-                    disableClickListener(possibleMove);
-                } else {
-                    // TODO rename this. it helps w what?
-                    const helper = (cellId) => {
-                        board[cellId] = plr.playerId;
-                        boardCells[cellId].dataset.ownerId = plr.playerId;
-                        disableClickListener(possibleMove);
-                        // check for neigbouring enemy pieces and turn them over
-                        getEnemyNeighbors(cellId).forEach((gained) => {
-                            const previousOwner = players[board[gained] - 1];
-                            // remove piece from current owner and give it to player
-                            plr.pieces.push(
-                                ...previousOwner.pieces.splice(previousOwner.pieces.indexOf(gained), 1),
-                            );
-                            // update internal board state
-                            board[gained] = plr.playerId;
-                            // update display
-                            boardCells[gained].dataset.ownerId = plr.playerId;
+            const movableCell = boardCells[possibleMove.pieceId];
+
+            movableCell.classList.add(cssClasses.clickableCell);
+            movableCell.addEventListener(
+                'click',
+                ({ target: { classList: classListOfSelectedPiece } }) => {
+                    // allow deselection of selected movable-piece
+                    if (classListOfSelectedPiece.contains(cssClasses.selectedForMove)) {
+                        // remove highlighting
+                        classListOfSelectedPiece.remove(cssClasses.selectedForMove);
+                        stopWaitingForMove(possibleMove);
+                        // start listening
+                        humanMove(possibleMoves);
+                    } else {
+                        const finalizeMoveToCell = (cellId) => {
+                            classListOfSelectedPiece.remove(cssClasses.clickableCell);
+                            classListOfSelectedPiece.remove(cssClasses.selectedForMove);
+                            board[cellId] = player.playerId;
+                            boardCells[cellId].dataset.ownerId = player.playerId;
+                            stopWaitingForMove(possibleMove);
+                            // check for neigbouring enemy pieces and turn them over
+                            getEnemyNeighbors(cellId).forEach((idOfGainedPiece) => {
+                                const previousOwner = players[board[idOfGainedPiece] - 1];
+                                // remove piece from current owner and give it to player
+                                player.pieces.push(
+                                    ...previousOwner.pieces.splice(previousOwner.pieces.indexOf(idOfGainedPiece), 1),
+                                );
+                                // update internal board state
+                                board[idOfGainedPiece] = player.playerId;
+                                // update display
+                                boardCells[idOfGainedPiece].dataset.ownerId = player.playerId;
+                            });
+                            endTurn();
+                        };
+
+                        classListOfSelectedPiece.add(cssClasses.selectedForMove);
+                        // remove eventlisteners and cursor-highlighting from other possible selection targets
+                        abortControllers.selectMoveOrigin.abort();
+                        player.pieces.forEach((cellId) => {
+                            if (cellId !== possibleMove.pieceId) {
+                                boardCells[cellId].classList.remove(cssClasses.clickableCell);
+                            }
                         });
-                        endTurn();
-                    };
-                    // highlight selected piece
-                    boardCells[possibleMove.pieceId].classList.add(cssClasses.selectedForMove);
-                    // remove eventlisteners and cursor-highlighting from other possible selection targets
-                    plr.pieces.forEach((cellId) => {
-                        if (cellId !== possibleMove.pieceId) {
-                            boardCells[cellId].onclick = null;
-                            boardCells[cellId].classList.remove(cssClasses.clickableCell);
-                        }
-                    });
-                    // listen for click on possible target
-                    possibleMove.moves.nextTo.forEach((cellId) => {
-                        boardCells[cellId].classList.add(cssClasses.clickableCell);
-                        boardCells[cellId].onclick = () => {
-                            boardCells[possibleMove.pieceId].onclick = null;
-                            boardCells[possibleMove.pieceId].classList.remove(cssClasses.clickableCell);
-                            boardCells[possibleMove.pieceId].classList.remove(cssClasses.selectedForMove);
-                            plr.pieces.push(cellId);
-                            helper(cellId);
-                        };
-                    });
-                    possibleMove.moves.oneOff.forEach((cellId) => {
-                        boardCells[cellId].classList.add(cssClasses.clickableCell);
-                        boardCells[cellId].onclick = () => {
-                            clearCell(possibleMove.pieceId);
-                            boardCells[possibleMove.pieceId].classList.remove(cssClasses.clickableCell);
-                            boardCells[possibleMove.pieceId].classList.remove(cssClasses.selectedForMove);
-                            plr.pieces[plr.pieces.indexOf(possibleMove.pieceId)] = cellId;
-                            helper(cellId);
-                        };
-                    });
-                }
-            };
+                        // listen for clicks on possible target-pieces
+                        possibleMove.moves.nextTo.forEach((cellId) => {
+                            boardCells[cellId].classList.add(cssClasses.clickableCell);
+                            boardCells[cellId].addEventListener(
+                                'click',
+                                () => {
+                                    // player gains a new piece at the target-cell
+                                    player.pieces.push(cellId);
+                                    finalizeMoveToCell(cellId);
+                                },
+                                { signal: abortControllers.selectMoveTarget.signal }
+                            );
+                        });
+                        possibleMove.moves.oneOff.forEach((cellId) => {
+                            boardCells[cellId].classList.add(cssClasses.clickableCell);
+                            boardCells[cellId].addEventListener(
+                                'click',
+                                () => {
+                                    // player moves the origin-piece to the target-cell
+                                    player.pieces[player.pieces.indexOf(possibleMove.pieceId)] = cellId;
+                                    clearCell(possibleMove.pieceId);
+                                    finalizeMoveToCell(cellId);
+                                },
+                                { signal: abortControllers.selectMoveTarget.signal }
+                            );
+                        });
+                    }
+                },
+                { signal: abortControllers.selectMoveOrigin.signal }
+            );
         });
     }
 
     // FIXME restarting a game or changing a player role while a move is in progress can cause the move to happen in the next game (adding unwarranted pieces into the game) or on a blank board (which is cleaned up, but still)
     async function machineMove(possibleMoves) {
-        const plr = players[idsOfActivePlayers[turn] - 1];
-        const payoffs = [];
+        const player = players[idsOfActivePlayers[turn] - 1];
+        const payoffs = possibleMoves.map((possibleMove) => ({
+            nextTo: possibleMove.moves.nextTo.map((closeNeighbor) => ({
+                origin: possibleMove.pieceId,
+                target: closeNeighbor,
+                bounty: getEnemyNeighbors(closeNeighbor),
+                type: 1,
+            })),
+            oneOff: possibleMove.moves.oneOff.map((farNeighbor) => ({
+                origin: possibleMove.pieceId,
+                target: farNeighbor,
+                bounty: getEnemyNeighbors(farNeighbor),
+                type: 0,
+            })),
+        }));
         let most = [0, []];
         let secMost = [];
         let thrdMost;
         let candidates;
 
-        // get payoffs
-        possibleMoves.forEach((possibleMove) => {
-            payoffs.push({
-                nextTo: possibleMove.moves.nextTo.map((closeNeighbor) => ({
-                    origin: possibleMove.pieceId,
-                    target: closeNeighbor,
-                    bounty: getEnemyNeighbors(closeNeighbor),
-                    type: 1,
-                })),
-                oneOff: possibleMove.moves.oneOff.map((farNeighbor) => ({
-                    origin: possibleMove.pieceId,
-                    target: farNeighbor,
-                    bounty: getEnemyNeighbors(farNeighbor),
-                    type: 0,
-                })),
-            });
-        });
-        // determine highest payoffs and remember corresponding moves
-        payoffs.forEach((startingPiece) => {
-            [...startingPiece.nextTo, ...startingPiece.oneOff].forEach((move) => {
-                if (most[0] < move.bounty.length + move.type) {
+        // find highest payoffs and remember corresponding moves
+        payoffs.forEach((payoff) => {
+            [...payoff.nextTo, ...payoff.oneOff].forEach((move) => {
+                const totalPayoff = move.bounty.length + move.type;
+
+                if (most[0] < totalPayoff) {
                     thrdMost = secMost.slice();
                     secMost = most.slice();
-                    most = [move.bounty.length + move.type, [move]];
-                } else if (most[0] > move.bounty.length + move.type) {
-                    if (secMost[0] < move.bounty.length + move.type) {
+                    most = [totalPayoff, [move]];
+                } else if (most[0] > totalPayoff) {
+                    if (secMost[0] < totalPayoff) {
                         thrdMost = secMost.slice();
-                        secMost = [move.bounty.length + move.type, [move]];
-                    } else if (secMost[0] > move.bounty.length + move.type) {
-                        if (thrdMost[0] < move.bounty.length + move.type) {
-                            thrdMost = [move.bounty.length + move.type, [move]];
-                        } else if (thrdMost[0] === move.bounty.length + move.type) {
+                        secMost = [totalPayoff, [move]];
+                    } else if (secMost[0] > totalPayoff) {
+                        if (thrdMost[0] < totalPayoff) {
+                            thrdMost = [totalPayoff, [move]];
+                        } else if (thrdMost[0] === totalPayoff) {
                             thrdMost[1].push(move);
                         }
-                    } else if (secMost[0] === move.bounty.length + move.type) {
+                    } else if (secMost[0] === totalPayoff) {
                         secMost[1].push(move);
                     }
-                } else if (most[0] === move.bounty.length + move.type) {
+                } else if (most[0] === totalPayoff) {
                     most[1].push(move);
                 }
             });
@@ -415,15 +431,15 @@ window.addEventListener('DOMContentLoaded', () => {
         await wait(500);
         [move.target, ...move.bounty].forEach((cellId) => {
             // Place piece in chosen cell
-            if (board[cellId] === 0) plr.pieces.push(cellId);
+            if (board[cellId] === 0) player.pieces.push(cellId);
             else {
                 const owner = players[board[cellId] - 1];
                 // Flip neighboring enemy pieces
-                plr.pieces.push(...owner.pieces.splice(owner.pieces.indexOf(cellId), 1));
+                player.pieces.push(...owner.pieces.splice(owner.pieces.indexOf(cellId), 1));
             }
             // Update board and display
-            board[cellId] = plr.playerId;
-            boardCells[cellId].dataset.ownerId = plr.playerId;
+            board[cellId] = player.playerId;
+            boardCells[cellId].dataset.ownerId = player.playerId;
         });
         // wait again and undo highlighting of move
         await wait(200);
@@ -433,36 +449,49 @@ window.addEventListener('DOMContentLoaded', () => {
         // when jumped, remove piece from origin
         if (move.type === 0) {
             clearCell(move.origin);
-            plr.pieces.splice(plr.pieces.indexOf(move.origin), 1);
+            player.pieces.splice(player.pieces.indexOf(move.origin), 1);
         }
 
         endTurn();
     }
 
-    function findFreeCells(val) {
-        return 0 <= val && val < board.length && board[val] === 0;
+    function findFreeCells(cellId) {
+        return cellId >= 0 && cellId < board.length && board[cellId] === 0;
     }
 
-    function getEnemyNeighbors(piece) {
-        const isPieceNotAtLBorder = piece % boardLen > 0;
-        const isPieceNotAtRBorder = piece % boardLen < 6;
+    /** Return array of cellIds surounding the given cellId, occupied by non-active players. */
+    function getEnemyNeighbors(pieceId) {
+        const isPieceNotAtLBorder = pieceId % boardLen > 0;
+        const isPieceNotAtRBorder = pieceId % boardLen < 6;
         const neighborCells = [
-            isPieceNotAtLBorder ? piece - 1 : -1,
-            isPieceNotAtLBorder ? piece - boardLen - 1 : -1,
-            isPieceNotAtLBorder ? piece + boardLen - 1 : -1,
-            piece - boardLen,
-            isPieceNotAtRBorder ? piece - boardLen + 1 : -1,
-            isPieceNotAtRBorder ? piece + 1 : -1,
-            isPieceNotAtRBorder ? piece + boardLen + 1 : -1,
-            piece + boardLen,
+            isPieceNotAtLBorder ? pieceId - 1 : -1,
+            isPieceNotAtLBorder ? pieceId - boardLen - 1 : -1,
+            isPieceNotAtLBorder ? pieceId + boardLen - 1 : -1,
+            pieceId - boardLen,
+            isPieceNotAtRBorder ? pieceId - boardLen + 1 : -1,
+            isPieceNotAtRBorder ? pieceId + 1 : -1,
+            isPieceNotAtRBorder ? pieceId + boardLen + 1 : -1,
+            pieceId + boardLen,
         ];
 
         return neighborCells.filter((cell) =>
-            0 <= cell
+            cell >= 0
             && cell < board.length
             && board[cell] !== 0
             && board[cell] !== idsOfActivePlayers[turn]
         );
+    }
+
+    function stopWaitingForMove({ moves: { nextTo, oneOff } }) {
+        // rm listeners
+        abortControllers.selectMoveTarget.abort();
+        // rm highlighting
+        [
+            ...nextTo,
+            ...oneOff
+        ].forEach((cellId) => {
+            boardCells[cellId].classList.remove(cssClasses.clickableCell);
+        })
     }
 
     function getPlaceStr(i) {
