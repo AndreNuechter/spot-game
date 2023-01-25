@@ -73,10 +73,34 @@ main {
 #plr3::before { content: " P3 "; }
 #plr4::before { content: " P4 "; }
 
-#plr1 { --player-color: #3399ff; }
-#plr2 { --player-color: #ff5050; }
-#plr3 { --player-color: #ff9900; }
-#plr4 { --player-color: #009900; }
+circle[data-owner-id="1"],
+#plr1 {
+  --player-color: #3399ff;
+}
+
+circle[data-owner-id="2"],
+#plr2 {
+  --player-color: #ff5050;
+}
+
+circle[data-owner-id="3"],
+#plr3 {
+  --player-color: #ff9900;
+}
+
+circle[data-owner-id="4"],
+#plr4 {
+  --player-color: #009900;
+}
+
+#board circle:not([data-owner-id=""]) {
+  fill: var(--player-color);
+}
+
+#board circle:not([data-owner-id]),
+#board circle[data-owner-id=""] {
+  fill: beige;
+}
 
 .player-icon {
   margin-top: 8px;
@@ -141,13 +165,20 @@ main {
 }
 
 #board circle {
-  fill: beige;
   stroke: black;
   stroke-width: 1;
 }
 
 .selected {
   animation: blinker 1s linear infinite;
+}
+
+.targeted {
+  stroke: yellow;
+}
+
+.clickable {
+  cursor: pointer;
 }
 
 button#start {
