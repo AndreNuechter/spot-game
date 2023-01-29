@@ -1,6 +1,7 @@
 import { boardLen, cellSize } from './constants.js';
 
 export const gameOverModal = document.getElementById('game-over-indicator');
+export const documentStyles = getComputedStyle(document.documentElement);
 export const mainClassList = document.querySelector('main').classList;
 export const startBtn = document.getElementById('start');
 /** Array of 49 svg-circles forming the board. */

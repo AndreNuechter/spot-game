@@ -1,28 +1,48 @@
 import './js/service-worker-init.js';
 import './js/wakelock.js';
-import { boardLen, cssClasses, playerTypeIconIds } from './js/constants.js';
-import { boardCells, gameOverModal, mainClassList, startBtn } from './js/dom-elements.js';
+import { boardLen, cellCount, cssClasses, playerTypeIconIds } from './js/constants.js';
+import { boardCells, documentStyles, gameOverModal, mainClassList, startBtn } from './js/dom-objects.js';
 import { CalculatedMove, getPlaceStr, getRandomInt, Player, wait } from './js/helper-functions.js';
 
 // TODO rework colors
 
 /** `boardLen`^2 length array of cellIds meant for keeping track of cell-ownership.
  * 0 means a cell is unoccupied and otherwise the cell belongs to the player w that id. */
-const board = new Array(Math.pow(boardLen, 2)).fill(0);
+const board = new Array(cellCount).fill(0);
 const players = [
-    // TODO colors are duplicated in css
-    new Player('#3399ff', 'human', 0, 1),
-    new Player('#ff5050', 'inactive', boardLen - 1, 2),
-    new Player('#ff9900', 'inactive', Math.pow(boardLen, 2) - boardLen, 3),
-    new Player('#009900', 'robot', Math.pow(boardLen, 2) - 1, 4),
+    new Player(
+            documentStyles.getPropertyValue('--player-1-color'),
+            'human',
+            0,
+            1
+        ),
+    new Player(
+            documentStyles.getPropertyValue('--player-2-color'),
+            'inactive',
+            boardLen - 1,
+            2
+        ),
+    new Player(
+            documentStyles.getPropertyValue('--player-3-color'),
+            'inactive',
+            cellCount - boardLen,
+            3
+        ),
+    new Player(
+            documentStyles.getPropertyValue('--player-4-color'),
+            'robot',
+            cellCount - 1,
+            4
+        ),
 ];
 const abortControllers = {
     selectMoveOrigin: new AbortController(),
-    selectMoveTarget: new AbortController()
+    selectMoveTarget: new AbortController(),
+    computerMove: new AbortController()
 };
+let turn = 0;
 /** List of 1-based ids of playing players */
 let idsOfActivePlayers;
-let turn;
 
 players.forEach(changePlayerRole);
 startBtn.addEventListener('click', () => {
@@ -35,19 +55,22 @@ startBtn.addEventListener('click', () => {
 
     if (idsOfActivePlayers.length < 2) return;
 
-    if (!mainClassList.contains(cssClasses.gameIsRunning)) {
+    if (mainClassList.contains(cssClasses.gameIsRunning)) {
+        // FIXME cant just restart ai game. prob cuz endgame is called immediately in machineMove
+        endGame();
+    } else {
         startBtn.textContent = 'Restart Game';
         mainClassList.add(cssClasses.gameIsRunning);
     }
 
-    turn = 0;
-    setBoard();
+    startGame();
 });
 
 function changePlayerRole(player) {
     player.roleChangeButton.addEventListener('click', () => {
         if (mainClassList.contains(cssClasses.gameIsRunning)) {
-            resetBoard();
+            endGame();
+            startBtn.textContent = 'Start Game';
         }
 
         switch (player.controllerType) {
@@ -64,12 +87,25 @@ function changePlayerRole(player) {
     });
 }
 
-function resetBoard() {
-    startBtn.textContent = 'Start Game';
+function endGame() {
+    turn = 0;
     mainClassList.remove(cssClasses.gameIsRunning);
-    clearBoard();
     players.forEach(player => player.roleChangeButton.classList.remove(cssClasses.activePlayer));
-    turn = undefined;
+    clearBoard();
+}
+
+function startGame() {
+    clearBoard();
+    idsOfActivePlayers.forEach((idOfActivePlayer) => {
+        const player = players[idOfActivePlayer - 1];
+        
+        boardCells[player.startPosition].dataset.ownerId = player.playerId;
+        board[player.startPosition] = player.playerId;
+        player.pieces.push(player.startPosition);
+        updatePieceCount(player);
+    });
+    abortControllers.computerMove = new AbortController();
+    makeMove();
 }
 
 function setPlayerRole(player, newRole) {
@@ -77,37 +113,36 @@ function setPlayerRole(player, newRole) {
     player.roleChangeButton.children[0].firstElementChild.setAttribute('href', playerTypeIconIds[newRole]);
 }
 
-function setBoard() {
-    clearBoard();
-    idsOfActivePlayers.forEach((idOfActivePlayer) => {
-        const player = players[idOfActivePlayer - 1];
+function updatePieceCount(player) {
+    setPlayerSelectButtonText(player, player.pieces.length);
+}
 
-        boardCells[player.start].dataset.ownerId = idOfActivePlayer;
-        board[player.start] = idOfActivePlayer;
-        player.pieces.push(player.start);
-        player.roleChangeButton.children[1].textContent = player.pieces.length;
-    });
-    move();
+function setPlayerSelectButtonText(player, text) {
+    player.roleChangeButton.children[1].textContent = text;
 }
 
 function clearBoard() {
     gameOverModal.classList.remove(cssClasses.visible);
     players.forEach((player) => {
         player.pieces.length = 0;
-        player.roleChangeButton.children[1].textContent = '';
+        setPlayerSelectButtonText(player, '');
     });
     abortControllers.selectMoveOrigin.abort();
     abortControllers.selectMoveTarget.abort();
+    abortControllers.computerMove.abort();
     boardCells.forEach((_, i) => clearCell(i));
 }
 
 function clearCell(cellId) {
     board[cellId] = 0;
     boardCells[cellId].dataset.ownerId = '';
+    boardCells[cellId].classList = '';
 }
 
-function move() {
-    if (turn === undefined) return;
+function makeMove() {
+    if (abortControllers.computerMove.signal.aborted) {
+        return;
+    }
 
     const player = players[idsOfActivePlayers[turn] - 1];
     /** { pieceId: 0-48, moves: { nextTo: [8; 0-48] oneOff: [16; 0-48] }[] }[] */
@@ -125,7 +160,8 @@ function move() {
     } else if (player.controllerType === 'human') {
         humanMove(possibleMoves);
     } else if (player.controllerType === 'robot') {
-        machineMove(possibleMoves);
+        machineMove(possibleMoves, abortControllers.computerMove.signal)
+            .then(endTurn);
     }
 }
 
@@ -170,31 +206,17 @@ function getPossibleMoves(pieceId) {
 }
 
 function endTurn() {
-    if (turn === undefined) {
-        resetBoard();
+    if (abortControllers.computerMove.signal.aborted) {
         return;
     }
 
-    // remove turn highlighting from button
     players[idsOfActivePlayers[turn] - 1].roleChangeButton.classList.remove(cssClasses.activePlayer);
+    idsOfActivePlayers.forEach((playerId) => updatePieceCount(players[playerId - 1]));
 
-    // advance turn
-    if (turn < idsOfActivePlayers.length - 1) {
-        turn += 1;
-    } else {
-        turn = 0;
-    }
-
-    // adjust piece counts
-    idsOfActivePlayers.forEach((playerId) => {
-        const player = players[playerId - 1];
-        player.roleChangeButton.children[1].textContent = player.pieces.length;
-    });
-
-    // stop game when board is full or only one player w pieces remains
+    // end or progress game
     if (
-        board.filter((cell) => cell === 0).length === 0 ||
-        players.filter((player) => player.pieces.length > 0).length <= 1
+        board.find((cell) => cell === 0) === undefined ||
+        players.filter((player) => player.pieces.length > 0).length === 1
     ) {
         // rank players and communicate end of game
         idsOfActivePlayers
@@ -203,13 +225,22 @@ function endTurn() {
                 pieceCount: players[playerId - 1].pieces.length
             }))
             .sort(({ pieceCount: a }, { pieceCount: b }) => b - a)
-            .forEach(({ playerId }, i) => {
-                players[playerId - 1].roleChangeButton.children[1].textContent = getPlaceStr(i);
-            });
+            .forEach(
+                ({ playerId }, i) => setPlayerSelectButtonText(
+                        players[playerId - 1],
+                        getPlaceStr(i)
+                    )
+            );
         gameOverModal.classList.add(cssClasses.visible);
         mainClassList.remove(cssClasses.gameIsRunning);
     } else {
-        move();
+        if (turn < idsOfActivePlayers.length - 1) {
+            turn += 1;
+        } else {
+            turn = 0;
+        }
+
+        makeMove();
     }
 }
 
@@ -238,14 +269,14 @@ function humanMove(possibleMoves) {
                     // start listening
                     humanMove(possibleMoves);
                 } else {
-                    const finalizeMoveToCell = (cellId) => {
+                    const finalizeMoveToCell = (idOfTargetCell) => {
                         classListOfSelectedPiece.remove(cssClasses.clickableCell);
                         classListOfSelectedPiece.remove(cssClasses.selectedForMove);
-                        board[cellId] = player.playerId;
-                        boardCells[cellId].dataset.ownerId = player.playerId;
+                        board[idOfTargetCell] = player.playerId;
+                        boardCells[idOfTargetCell].dataset.ownerId = player.playerId;
                         stopWaitingForMove(possibleMove);
                         // check for neigbouring enemy pieces and turn them over
-                        getEnemyNeighbors(cellId).forEach((idOfGainedPiece) => {
+                        getEnemyNeighbors(idOfTargetCell).forEach((idOfGainedPiece) => {
                             const previousOwner = players[board[idOfGainedPiece] - 1];
                             // remove piece from current owner and give it to player
                             player.pieces.push(
@@ -300,8 +331,7 @@ function humanMove(possibleMoves) {
     });
 }
 
-// FIXME restarting a game or changing a player role while a move is in progress can cause the move to happen in the next game (adding unwarranted pieces into the game) or on a blank board (which is cleaned up, but still)
-async function machineMove(possibleMoves) {
+async function machineMove(possibleMoves, abortSignal) {
     const player = players[idsOfActivePlayers[turn] - 1];
     const payoffs = possibleMoves
         .map((possibleMove) => ({
@@ -320,66 +350,92 @@ async function machineMove(possibleMoves) {
                     0
                 )),
         }));
-    let most = [0, []];
-    let secMost = [];
-    let thrdMost;
-    let candidates;
+    let highestPayoff = [0, []];
+    let secondHighestPayoff = [];
+    let thirdHighestPayoff;
+    let bestMoves;
 
     // find highest payoffs and remember corresponding moves
     payoffs.forEach((payoff) => {
         [...payoff.nextTo, ...payoff.oneOff].forEach((move) => {
             const totalPayoff = move.bounty.length + move.type;
 
-            if (most[0] < totalPayoff) {
-                thrdMost = secMost.slice();
-                secMost = most.slice();
-                most = [totalPayoff, [move]];
-            } else if (most[0] > totalPayoff) {
-                if (secMost[0] < totalPayoff) {
-                    thrdMost = secMost.slice();
-                    secMost = [totalPayoff, [move]];
-                } else if (secMost[0] > totalPayoff) {
-                    if (thrdMost[0] < totalPayoff) {
-                        thrdMost = [totalPayoff, [move]];
-                    } else if (thrdMost[0] === totalPayoff) {
-                        thrdMost[1].push(move);
+            if (highestPayoff[0] < totalPayoff) {
+                thirdHighestPayoff = secondHighestPayoff.slice();
+                secondHighestPayoff = highestPayoff.slice();
+                highestPayoff = [totalPayoff, [move]];
+            } else if (highestPayoff[0] > totalPayoff) {
+                if (secondHighestPayoff[0] < totalPayoff) {
+                    thirdHighestPayoff = secondHighestPayoff.slice();
+                    secondHighestPayoff = [totalPayoff, [move]];
+                } else if (secondHighestPayoff[0] > totalPayoff) {
+                    if (thirdHighestPayoff[0] < totalPayoff) {
+                        thirdHighestPayoff = [totalPayoff, [move]];
+                    } else if (thirdHighestPayoff[0] === totalPayoff) {
+                        thirdHighestPayoff[1].push(move);
                     }
-                } else if (secMost[0] === totalPayoff) {
-                    secMost[1].push(move);
+                } else if (secondHighestPayoff[0] === totalPayoff) {
+                    secondHighestPayoff[1].push(move);
                 }
-            } else if (most[0] === totalPayoff) {
-                most[1].push(move);
+            } else if (highestPayoff[0] === totalPayoff) {
+                highestPayoff[1].push(move);
             }
         });
     });
 
     // Randomnly pick one of the three highest payoffs (w strong bias towards highest)
     // There can be 1 (secMost[0] === 0), 2 (secMost[0] !== 0 && thrdMost[0] === 0) and 3 highest payoffs, here mapped to distributions of [1], [.9, .1], [.9, .09, .01].
-    if (secMost[0] === 0) {
-        candidates = most;
-    } else if (secMost[0] !== 0 && thrdMost[0] === 0) {
-        const dice = Math.random();
-        if (dice > 0.1) candidates = most;
-        else candidates = secMost;
+    if (secondHighestPayoff[0] === 0) {
+        bestMoves = highestPayoff;
+    } else if (thirdHighestPayoff[0] === 0) {
+        if (Math.random() > 0.1) {
+            bestMoves = highestPayoff;
+        } else {
+            bestMoves = secondHighestPayoff;
+        }
     } else {
-        const dice = Math.random();
-        if (dice > 0.1) candidates = most;
-        else if (dice > 0.01) candidates = secMost;
-        else candidates = thrdMost;
+        const diceRoll = Math.random();
+        if (diceRoll > 0.1) {
+            bestMoves = highestPayoff;
+        } else if (diceRoll > 0.01) {
+            bestMoves = secondHighestPayoff;
+        } else {
+            bestMoves = thirdHighestPayoff;
+        }
     }
 
     // Randomnly pick one of the moves leading to chosen payoff
-    const id = getRandomInt(0, candidates[1].length - 1);
-    const move = candidates[1][id];
+    const id = getRandomInt(0, bestMoves[1].length - 1);
+    const move = bestMoves[1][id];
 
-    // wait a bit and highlight selected piece
+    // wait a bit and highlight the selected piece
     await wait(200);
+
+    if (abortSignal.aborted) {
+        endGame();
+        return;
+    }
+
     boardCells[move.origin].classList.add(cssClasses.selectedForMove);
+
     // wait a bit more and highlight target cell
     await wait(400);
+
+    if (abortSignal.aborted) {
+        endGame();
+        return;
+    }
+
     boardCells[move.target].classList.add(cssClasses.highlightedTargetCell);
-    // wait even more and make move
+
+    // wait even more and make the move
     await wait(500);
+
+    if (abortSignal.aborted) {
+        endGame();
+        return;
+    }
+
     [move.target, ...move.bounty].forEach((cellId) => {
         // Place piece in chosen cell
         if (board[cellId] === 0) player.pieces.push(cellId);
@@ -392,8 +448,15 @@ async function machineMove(possibleMoves) {
         board[cellId] = player.playerId;
         boardCells[cellId].dataset.ownerId = player.playerId;
     });
+
     // wait again and undo highlighting of move
     await wait(200);
+
+    if (abortSignal.aborted) {
+        endGame();
+        return;
+    }
+
     boardCells[move.origin].classList.remove(cssClasses.selectedForMove);
     boardCells[move.target].classList.remove(cssClasses.highlightedTargetCell);
 
@@ -402,27 +465,25 @@ async function machineMove(possibleMoves) {
         clearCell(move.origin);
         player.pieces.splice(player.pieces.indexOf(move.origin), 1);
     }
-
-    endTurn();
 }
 
 function findFreeCells(cellId) {
     return cellId >= 0 && cellId < board.length && board[cellId] === 0;
 }
 
-/** Return array of cellIds surounding the given cellId, occupied by non-active players. */
-function getEnemyNeighbors(pieceId) {
-    const isPieceNotAtLBorder = pieceId % boardLen > 0;
-    const isPieceNotAtRBorder = pieceId % boardLen < 6;
+/** Return array of ids of cells surounding the given cell, occupied by non-active players. */
+function getEnemyNeighbors(cellId) {
+    const isPieceNotAtLBorder = cellId % boardLen > 0;
+    const isPieceNotAtRBorder = cellId % boardLen < 6;
     const neighborCells = [
-        isPieceNotAtLBorder ? pieceId - 1 : -1,
-        isPieceNotAtLBorder ? pieceId - boardLen - 1 : -1,
-        isPieceNotAtLBorder ? pieceId + boardLen - 1 : -1,
-        pieceId - boardLen,
-        isPieceNotAtRBorder ? pieceId - boardLen + 1 : -1,
-        isPieceNotAtRBorder ? pieceId + 1 : -1,
-        isPieceNotAtRBorder ? pieceId + boardLen + 1 : -1,
-        pieceId + boardLen,
+        isPieceNotAtLBorder ? cellId - 1 : -1,
+        isPieceNotAtLBorder ? cellId - boardLen - 1 : -1,
+        isPieceNotAtLBorder ? cellId + boardLen - 1 : -1,
+        cellId - boardLen,
+        isPieceNotAtRBorder ? cellId - boardLen + 1 : -1,
+        isPieceNotAtRBorder ? cellId + 1 : -1,
+        isPieceNotAtRBorder ? cellId + boardLen + 1 : -1,
+        cellId + boardLen,
     ];
 
     return neighborCells.filter((cell) =>
@@ -437,10 +498,7 @@ function stopWaitingForMove({ moves: { nextTo, oneOff } }) {
     // rm listeners
     abortControllers.selectMoveTarget.abort();
     // rm highlighting
-    [
-        ...nextTo,
-        ...oneOff
-    ].forEach((cellId) => {
-        boardCells[cellId].classList.remove(cssClasses.clickableCell);
-    })
+    [...nextTo, ...oneOff].forEach(
+        (cellId) => boardCells[cellId].classList.remove(cssClasses.clickableCell)
+    );
 }

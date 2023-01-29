@@ -3,6 +3,10 @@ html {
   box-sizing: border-box;
   --border-radius: 1%;
   --board-size: 256px;
+  --player-1-color: #3399ff;
+  --player-2-color: #ff5050;
+  --player-3-color: #ff9900;
+  --player-4-color: #009900;
 }
 
 html * {
@@ -75,22 +79,22 @@ main {
 
 circle[data-owner-id="1"],
 #plr1 {
-  --player-color: #3399ff;
+  --player-color: var(--player-1-color);
 }
 
 circle[data-owner-id="2"],
 #plr2 {
-  --player-color: #ff5050;
+  --player-color: var(--player-2-color);
 }
 
 circle[data-owner-id="3"],
 #plr3 {
-  --player-color: #ff9900;
+  --player-color: var(--player-3-color);
 }
 
 circle[data-owner-id="4"],
 #plr4 {
-  --player-color: #009900;
+  --player-color: var(--player-4-color);
 }
 
 #board circle:not([data-owner-id=""]) {

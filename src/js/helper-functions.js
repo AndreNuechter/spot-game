@@ -3,7 +3,7 @@ export function CalculatedMove(origin, target, bounty, type) {
         origin,
         target,
         bounty,
-        type 
+        type
     };
 }
 
@@ -24,11 +24,11 @@ export function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-export function Player(color, controllerType, start, playerId) {
+export function Player(color, controllerType, startPosition, playerId) {
     return {
         color,
         controllerType,
-        start,
+        startPosition,
         playerId,
         /** Will contain ids of boardCells belonging to that player */
         pieces: [],
