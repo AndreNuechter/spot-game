@@ -173,7 +173,7 @@ circle[data-owner-id="4"],
   animation: blinker 1s linear infinite;
 }
 
-.targeted {
+#board circle.targeted {
   stroke: yellow;
 }
 
