@@ -36,15 +36,34 @@ const players = [
         ),
 ];
 const abortControllers = {
-    selectMoveOrigin: new AbortController(),
-    selectMoveTarget: new AbortController(),
+    selectMovablePiece: new AbortController(),
+    selectReachableFreeCell: new AbortController(),
     computerMove: new AbortController()
 };
 let turn = 0;
 /** List of 1-based ids of playing players */
-let idsOfActivePlayers;
+let idsOfActivePlayers = [];
 
-players.forEach(changePlayerRole);
+players.forEach(
+    (player) => player.roleChangeButton.addEventListener('click', () => {
+        if (mainClassList.contains(cssClasses.gameIsRunning)) {
+            endGame();
+            startBtn.textContent = 'Start Game';
+        }
+
+        switch (player.controllerType) {
+            case 'inactive':
+                setPlayerRole(player, 'robot');
+                break;
+            case 'robot':
+                setPlayerRole(player, 'human');
+                break;
+            case 'human':
+                setPlayerRole(player, 'inactive');
+                break;
+        }
+    })
+);
 startBtn.addEventListener('click', () => {
     idsOfActivePlayers = players.reduce((ids, player) => {
         if (player.controllerType !== 'inactive') {
@@ -65,27 +84,6 @@ startBtn.addEventListener('click', () => {
 
     startGame();
 });
-
-function changePlayerRole(player) {
-    player.roleChangeButton.addEventListener('click', () => {
-        if (mainClassList.contains(cssClasses.gameIsRunning)) {
-            endGame();
-            startBtn.textContent = 'Start Game';
-        }
-
-        switch (player.controllerType) {
-            case 'inactive':
-                setPlayerRole(player, 'robot');
-                break;
-            case 'robot':
-                setPlayerRole(player, 'human');
-                break;
-            case 'human':
-                setPlayerRole(player, 'inactive');
-                break;
-        }
-    });
-}
 
 function endGame() {
     turn = 0;
@@ -127,8 +125,8 @@ function clearBoard() {
         player.pieces.length = 0;
         setPlayerSelectButtonText(player, '');
     });
-    abortControllers.selectMoveOrigin.abort();
-    abortControllers.selectMoveTarget.abort();
+    abortControllers.selectMovablePiece.abort();
+    abortControllers.selectReachableFreeCell.abort();
     abortControllers.computerMove.abort();
     boardCells.forEach((_, i) => clearCell(i));
 }
@@ -244,13 +242,16 @@ function endTurn() {
     }
 }
 
-/** @param { Object } possibleMoves { pieceId: 0-48, moves: { nextTo: [max. 8; 0-48] oneOff: [max. 16; 0-48] }[] }[] */
+/** Set up event handlers for a human player move.
+ * 1) For selecting a movable piece and
+ * 2) for selecting an empty target cell to move to.
+ * @param { Object } possibleMoves { pieceId: 0-48, moves: { nextTo: [max. 8; 0-48] oneOff: [max. 16; 0-48] }[] }[] */
 function humanMove(possibleMoves) {
     const player = players[idsOfActivePlayers[turn] - 1];
-    
+
     Object.assign(abortControllers, {
-        selectMoveOrigin: new AbortController(),
-        selectMoveTarget: new AbortController()
+        selectMovablePiece: new AbortController(),
+        selectReachableFreeCell: new AbortController()
     });
 
     // allow selection of movable pieces
@@ -260,22 +261,25 @@ function humanMove(possibleMoves) {
         movableCell.classList.add(cssClasses.clickableCell);
         movableCell.addEventListener(
             'click',
-            ({ target: { classList: classListOfSelectedPiece } }) => {
-                // allow deselection of selected movable-piece
-                if (classListOfSelectedPiece.contains(cssClasses.selectedForMove)) {
-                    // remove highlighting
-                    classListOfSelectedPiece.remove(cssClasses.selectedForMove);
-                    stopWaitingForMove(possibleMove);
-                    // start listening
-                    humanMove(possibleMoves);
+            ({ target: { classList: classListOfClickedPiece } }) => {
+                // clicked on previously selected movable-piece
+                if (classListOfClickedPiece.contains(cssClasses.selectedForMove)) {
+                    // remove highlighting from selected piece
+                    classListOfClickedPiece.remove(cssClasses.selectedForMove);
+                    removeHighlightFromTargetCells(possibleMove);
+                    // re-allow pointing at other movable pieces
+                    possibleMoves.forEach(
+                        (possibleMove) => boardCells[possibleMove.pieceId].classList.replace(
+                            cssClasses.disabledCell,
+                            cssClasses.clickableCell
+                        )
+                    );
                 } else {
                     const finalizeMoveToCell = (idOfTargetCell) => {
-                        classListOfSelectedPiece.remove(cssClasses.clickableCell);
-                        classListOfSelectedPiece.remove(cssClasses.selectedForMove);
+                        // take ownership of target cell
                         board[idOfTargetCell] = player.playerId;
                         boardCells[idOfTargetCell].dataset.ownerId = player.playerId;
-                        stopWaitingForMove(possibleMove);
-                        // check for neigbouring enemy pieces and turn them over
+                        // flip neighbouring enemy pieces
                         getEnemyNeighbors(idOfTargetCell).forEach((idOfGainedPiece) => {
                             const previousOwner = players[board[idOfGainedPiece] - 1];
                             // remove piece from current owner and give it to player
@@ -287,18 +291,32 @@ function humanMove(possibleMoves) {
                             // update display
                             boardCells[idOfGainedPiece].dataset.ownerId = player.playerId;
                         });
+                        // clean up
+                        abortControllers.selectMovablePiece.abort();
+                        abortControllers.selectReachableFreeCell.abort();
+                        possibleMoves.forEach(
+                            (possibleMove) => boardCells[possibleMove.pieceId].classList.remove(
+                                cssClasses.disabledCell,
+                                cssClasses.clickableCell,
+                                cssClasses.selectedForMove
+                            )
+                        );
+                        removeHighlightFromTargetCells(possibleMove);
                         endTurn();
                     };
 
-                    classListOfSelectedPiece.add(cssClasses.selectedForMove);
-                    // remove eventlisteners and cursor-highlighting from other possible selection targets
-                    abortControllers.selectMoveOrigin.abort();
-                    player.pieces.forEach((cellId) => {
-                        if (cellId !== possibleMove.pieceId) {
-                            boardCells[cellId].classList.remove(cssClasses.clickableCell);
-                        }
-                    });
-                    // listen for clicks on possible target-pieces
+                    // mark piece as selected
+                    classListOfClickedPiece.add(cssClasses.selectedForMove);
+                    // prevent selecting another movable piece
+                    player.pieces
+                        .filter((cellId) => cellId !== possibleMove.pieceId)
+                        .forEach(
+                            (cellId) => boardCells[cellId].classList.replace(
+                                cssClasses.clickableCell,
+                                cssClasses.disabledCell
+                            )
+                        );
+                    // listen for clicks on possible target-cells
                     possibleMove.moves.nextTo.forEach((cellId) => {
                         boardCells[cellId].classList.add(cssClasses.clickableCell);
                         boardCells[cellId].addEventListener(
@@ -308,7 +326,7 @@ function humanMove(possibleMoves) {
                                 player.pieces.push(cellId);
                                 finalizeMoveToCell(cellId);
                             },
-                            { signal: abortControllers.selectMoveTarget.signal }
+                            { signal: abortControllers.selectReachableFreeCell.signal }
                         );
                     });
                     possibleMove.moves.oneOff.forEach((cellId) => {
@@ -321,12 +339,12 @@ function humanMove(possibleMoves) {
                                 clearCell(possibleMove.pieceId);
                                 finalizeMoveToCell(cellId);
                             },
-                            { signal: abortControllers.selectMoveTarget.signal }
+                            { signal: abortControllers.selectReachableFreeCell.signal }
                         );
                     });
                 }
             },
-            { signal: abortControllers.selectMoveOrigin.signal }
+            { signal: abortControllers.selectMovablePiece.signal }
         );
     });
 }
@@ -457,14 +475,15 @@ async function machineMove(possibleMoves, abortSignal) {
         return;
     }
 
-    boardCells[move.origin].classList.remove(cssClasses.selectedForMove);
-    boardCells[move.target].classList.remove(cssClasses.highlightedTargetCell);
-
     // when jumped, remove piece from origin
     if (move.type === 0) {
         clearCell(move.origin);
         player.pieces.splice(player.pieces.indexOf(move.origin), 1);
     }
+
+    // rm highlighting
+    boardCells[move.origin].classList.remove(cssClasses.selectedForMove);
+    boardCells[move.target].classList.remove(cssClasses.highlightedTargetCell)
 }
 
 function findFreeCells(cellId) {
@@ -494,9 +513,7 @@ function getEnemyNeighbors(cellId) {
     );
 }
 
-function stopWaitingForMove({ moves: { nextTo, oneOff } }) {
-    // rm listeners
-    abortControllers.selectMoveTarget.abort();
+function removeHighlightFromTargetCells({ moves: { nextTo, oneOff } }) {
     // rm highlighting
     [...nextTo, ...oneOff].forEach(
         (cellId) => boardCells[cellId].classList.remove(cssClasses.clickableCell)

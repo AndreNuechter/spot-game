@@ -4,6 +4,7 @@ export const cellSize = 36;
 export const cssClasses = {
     activePlayer: 'active',
     clickableCell: 'clickable',
+    disabledCell: 'disabled',
     gameIsRunning: 'game-is-running',
     highlightedTargetCell: 'targeted',
     selectedForMove: 'selected',

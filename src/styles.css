@@ -185,6 +185,10 @@ circle[data-owner-id="4"],
   cursor: pointer;
 }
 
+.disabled {
+  pointer-events: none;
+}
+
 button#start {
   display: block;
   border: none;
