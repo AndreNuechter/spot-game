@@ -15,3 +15,9 @@ export const playerTypeIconIds = {
     robot: '#ai-player',
     inactive: '#no-player'
 };
+export const machineMoveDelays = {
+    highlightStart: 200,
+    highlightEnd: 400,
+    makeMove: 500,
+    finalize: 200
+};

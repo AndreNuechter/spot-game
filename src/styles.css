@@ -200,6 +200,14 @@ button#start {
   height: 40px;
 }
 
+button#start::after {
+  content: 'Start Game'
+}
+
+.game-is-running button#start::after {
+  content: 'Restart Game'
+}
+
 @keyframes blinker {
   50% {
     fill: Yellow;

@@ -35,7 +35,3 @@ export function Player(color, controllerType, startPosition, playerId) {
         roleChangeButton: document.getElementById(`plr${playerId}`)
     };
 }
-
-export function wait(ms) {
-    return new Promise((r) => setTimeout(r, ms));
-}

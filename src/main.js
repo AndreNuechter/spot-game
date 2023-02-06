@@ -1,34 +1,36 @@
 import './js/service-worker-init.js';
 import './js/wakelock.js';
-import { boardLen, cellCount, cssClasses, playerTypeIconIds } from './js/constants.js';
+import { boardLen, cellCount, cssClasses, machineMoveDelays, playerTypeIconIds } from './js/constants.js';
 import { boardCells, documentStyles, gameOverModal, mainClassList, startBtn } from './js/dom-objects.js';
-import { CalculatedMove, getPlaceStr, getRandomInt, Player, wait } from './js/helper-functions.js';
+import { CalculatedMove, getPlaceStr, getRandomInt, Player } from './js/helper-functions.js';
 
-// TODO rework colors
+// TODO rework colors...
+// semantic vars for css colors
+// gradient for bg
 
 /** `boardLen`^2 length array of cellIds meant for keeping track of cell-ownership.
  * 0 means a cell is unoccupied and otherwise the cell belongs to the player w that id. */
 const board = new Array(cellCount).fill(0);
 const players = [
-    new Player(
+    Player(
             documentStyles.getPropertyValue('--player-1-color'),
             'human',
             0,
             1
         ),
-    new Player(
+    Player(
             documentStyles.getPropertyValue('--player-2-color'),
             'inactive',
             boardLen - 1,
             2
         ),
-    new Player(
+    Player(
             documentStyles.getPropertyValue('--player-3-color'),
             'inactive',
             cellCount - boardLen,
             3
         ),
-    new Player(
+    Player(
             documentStyles.getPropertyValue('--player-4-color'),
             'robot',
             cellCount - 1,
@@ -37,18 +39,17 @@ const players = [
 ];
 const abortControllers = {
     selectMovablePiece: new AbortController(),
-    selectReachableFreeCell: new AbortController(),
-    computerMove: new AbortController()
+    selectReachableFreeCell: new AbortController()
 };
 let turn = 0;
 /** List of 1-based ids of playing players */
 let idsOfActivePlayers = [];
+let animationRequestId;
 
 players.forEach(
     (player) => player.roleChangeButton.addEventListener('click', () => {
         if (mainClassList.contains(cssClasses.gameIsRunning)) {
             endGame();
-            startBtn.textContent = 'Start Game';
         }
 
         switch (player.controllerType) {
@@ -75,11 +76,7 @@ startBtn.addEventListener('click', () => {
     if (idsOfActivePlayers.length < 2) return;
 
     if (mainClassList.contains(cssClasses.gameIsRunning)) {
-        // FIXME cant just restart ai game. prob cuz endgame is called immediately in machineMove
         endGame();
-    } else {
-        startBtn.textContent = 'Restart Game';
-        mainClassList.add(cssClasses.gameIsRunning);
     }
 
     startGame();
@@ -89,11 +86,15 @@ function endGame() {
     turn = 0;
     mainClassList.remove(cssClasses.gameIsRunning);
     players.forEach(player => player.roleChangeButton.classList.remove(cssClasses.activePlayer));
+    abortControllers.selectMovablePiece.abort();
+    abortControllers.selectReachableFreeCell.abort();
+    cancelAnimationFrame(animationRequestId);
     clearBoard();
 }
 
 function startGame() {
     clearBoard();
+    mainClassList.add(cssClasses.gameIsRunning);
     idsOfActivePlayers.forEach((idOfActivePlayer) => {
         const player = players[idOfActivePlayer - 1];
         
@@ -102,8 +103,7 @@ function startGame() {
         player.pieces.push(player.startPosition);
         updatePieceCount(player);
     });
-    abortControllers.computerMove = new AbortController();
-    makeMove();
+    takeTurn();
 }
 
 function setPlayerRole(player, newRole) {
@@ -125,9 +125,6 @@ function clearBoard() {
         player.pieces.length = 0;
         setPlayerSelectButtonText(player, '');
     });
-    abortControllers.selectMovablePiece.abort();
-    abortControllers.selectReachableFreeCell.abort();
-    abortControllers.computerMove.abort();
     boardCells.forEach((_, i) => clearCell(i));
 }
 
@@ -137,11 +134,7 @@ function clearCell(cellId) {
     boardCells[cellId].classList = '';
 }
 
-function makeMove() {
-    if (abortControllers.computerMove.signal.aborted) {
-        return;
-    }
-
+function takeTurn() {
     const player = players[idsOfActivePlayers[turn] - 1];
     /** { pieceId: 0-48, moves: { nextTo: [8; 0-48] oneOff: [16; 0-48] }[] }[] */
     const possibleMoves = player.pieces
@@ -158,8 +151,7 @@ function makeMove() {
     } else if (player.controllerType === 'human') {
         humanMove(possibleMoves);
     } else if (player.controllerType === 'robot') {
-        machineMove(possibleMoves, abortControllers.computerMove.signal)
-            .then(endTurn);
+        computerMove(possibleMoves);
     }
 }
 
@@ -204,10 +196,6 @@ function getPossibleMoves(pieceId) {
 }
 
 function endTurn() {
-    if (abortControllers.computerMove.signal.aborted) {
-        return;
-    }
-
     players[idsOfActivePlayers[turn] - 1].roleChangeButton.classList.remove(cssClasses.activePlayer);
     idsOfActivePlayers.forEach((playerId) => updatePieceCount(players[playerId - 1]));
 
@@ -238,7 +226,7 @@ function endTurn() {
             turn = 0;
         }
 
-        makeMove();
+        takeTurn();
     }
 }
 
@@ -349,7 +337,7 @@ function humanMove(possibleMoves) {
     });
 }
 
-async function machineMove(possibleMoves, abortSignal) {
+function computerMove(possibleMoves) {
     const player = players[idsOfActivePlayers[turn] - 1];
     const payoffs = possibleMoves
         .map((possibleMove) => ({
@@ -395,7 +383,7 @@ async function machineMove(possibleMoves, abortSignal) {
                 } else if (secondHighestPayoff[0] === totalPayoff) {
                     secondHighestPayoff[1].push(move);
                 }
-            } else if (highestPayoff[0] === totalPayoff) {
+            } else {
                 highestPayoff[1].push(move);
             }
         });
@@ -413,6 +401,7 @@ async function machineMove(possibleMoves, abortSignal) {
         }
     } else {
         const diceRoll = Math.random();
+
         if (diceRoll > 0.1) {
             bestMoves = highestPayoff;
         } else if (diceRoll > 0.01) {
@@ -423,67 +412,69 @@ async function machineMove(possibleMoves, abortSignal) {
     }
 
     // Randomnly pick one of the moves leading to chosen payoff
-    const id = getRandomInt(0, bestMoves[1].length - 1);
-    const move = bestMoves[1][id];
-
-    // wait a bit and highlight the selected piece
-    await wait(200);
-
-    if (abortSignal.aborted) {
-        endGame();
-        return;
-    }
-
-    boardCells[move.origin].classList.add(cssClasses.selectedForMove);
-
-    // wait a bit more and highlight target cell
-    await wait(400);
-
-    if (abortSignal.aborted) {
-        endGame();
-        return;
-    }
-
-    boardCells[move.target].classList.add(cssClasses.highlightedTargetCell);
-
-    // wait even more and make the move
-    await wait(500);
-
-    if (abortSignal.aborted) {
-        endGame();
-        return;
-    }
-
-    [move.target, ...move.bounty].forEach((cellId) => {
-        // Place piece in chosen cell
-        if (board[cellId] === 0) player.pieces.push(cellId);
-        else {
-            const owner = players[board[cellId] - 1];
-            // Flip neighboring enemy pieces
-            player.pieces.push(...owner.pieces.splice(owner.pieces.indexOf(cellId), 1));
+    const move = bestMoves[1][getRandomInt(0, bestMoves[1].length - 1)];
+    // to make it easier to follow the computer,
+    // we delay the different phases of the move
+    const startChosenAt = performance.now();
+    const endChosenAt = startChosenAt + machineMoveDelays.highlightStart;
+    const moveMadeAt = endChosenAt + machineMoveDelays.highlightEnd;
+    const turnEndedAt = moveMadeAt + machineMoveDelays.finalize;
+    // phase 4) finalize the move
+    const finalizeMove = (timestamp) => {
+        if (timestamp - turnEndedAt >= machineMoveDelays.finalize) {
+            // if the player jumped, rm the original piece
+            if (move.type === 0) {
+                clearCell(move.origin);
+                player.pieces.splice(player.pieces.indexOf(move.origin), 1);
+            }
+            // rm highlighting
+            boardCells[move.origin].classList.remove(cssClasses.selectedForMove);
+            boardCells[move.target].classList.remove(cssClasses.highlightedTargetCell);
+            animationRequestId = requestAnimationFrame(endTurn);
+        } else {
+            animationRequestId = requestAnimationFrame(finalizeMove);
         }
-        // Update board and display
-        board[cellId] = player.playerId;
-        boardCells[cellId].dataset.ownerId = player.playerId;
-    });
+    };
+    // phase 3) make the move
+    const makeMove = (timestamp) => {
+        if (timestamp - moveMadeAt >= machineMoveDelays.makeMove) {
+            [move.target, ...move.bounty].forEach((cellId) => {
+                // Place piece in chosen cell
+                if (board[cellId] === 0) player.pieces.push(cellId);
+                else {
+                    const owner = players[board[cellId] - 1];
+                    // Flip neighboring enemy pieces
+                    player.pieces.push(...owner.pieces.splice(owner.pieces.indexOf(cellId), 1));
+                }
+                // Update board and display
+                board[cellId] = player.playerId;
+                boardCells[cellId].dataset.ownerId = player.playerId;
+            });
+            animationRequestId = requestAnimationFrame(finalizeMove);
+        } else {
+            animationRequestId = requestAnimationFrame(makeMove);
+        }
+    };
+    // phase 2) highlight the target cell
+    const highlightSelectedCell = (timestamp) => {
+        if (timestamp - endChosenAt >= machineMoveDelays.highlightEnd) {
+            boardCells[move.target].classList.add(cssClasses.highlightedTargetCell);
+            animationRequestId = requestAnimationFrame(makeMove);
+        } else {
+            animationRequestId = requestAnimationFrame(highlightSelectedCell);
+        }
+    };
+    // phase 1) highlight the selected piece
+    const highlightSelectedPiece = (timestamp) => {
+        if (timestamp - startChosenAt >= machineMoveDelays.highlightStart) {
+            boardCells[move.origin].classList.add(cssClasses.selectedForMove);
+            animationRequestId = requestAnimationFrame(highlightSelectedCell);
+        } else {
+            animationRequestId = requestAnimationFrame(highlightSelectedPiece);
+        }
+    };
 
-    // wait again and undo highlighting of move
-    await wait(200);
-
-    if (abortSignal.aborted) {
-        endGame();
-        return;
-    }
-
-    // when jumped, remove piece from origin
-    if (move.type === 0) {
-        clearCell(move.origin);
-        player.pieces.splice(player.pieces.indexOf(move.origin), 1);
-    }
-
-    // rm highlighting
-    boardCells[move.origin].classList.remove(cssClasses.selectedForMove);
-    boardCells[move.target].classList.remove(cssClasses.highlightedTargetCell)
+    animationRequestId = requestAnimationFrame(highlightSelectedPiece);
 }
 
 function findFreeCells(cellId) {
@@ -508,13 +499,11 @@ function getEnemyNeighbors(cellId) {
     return neighborCells.filter((cell) =>
         cell >= 0
         && cell < board.length
-        && board[cell] !== 0
-        && board[cell] !== idsOfActivePlayers[turn]
+        && ![0, idsOfActivePlayers[turn]].includes(board[cell])
     );
 }
 
 function removeHighlightFromTargetCells({ moves: { nextTo, oneOff } }) {
-    // rm highlighting
     [...nextTo, ...oneOff].forEach(
         (cellId) => boardCells[cellId].classList.remove(cssClasses.clickableCell)
     );
