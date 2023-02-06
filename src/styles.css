@@ -52,7 +52,7 @@ main {
   margin: 24px auto;
   border: var(--border-style);
   border-inline: 0;
-  box-shadow: 4px 4px 4px grey, inset -4px -4px 4px lightgrey;
+  box-shadow: 0px 4px 4px grey, inset -4px -4px 4px lightgrey;
   width: 100%;
   background: white;
 }
@@ -62,6 +62,7 @@ main {
     max-width: 376px;
     border-radius: var(--border-radius);
     border-inline: var(--border-style);
+    box-shadow: 4px 4px 4px grey, inset -4px -4px 4px lightgrey;
   }
 }
 
