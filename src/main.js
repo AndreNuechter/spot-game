@@ -1,6 +1,6 @@
 import './js/service-worker-init.js';
 import './js/wakelock.js';
-import { boardLen, cellCount, cssClasses, machineMoveDelays, playerTypeIconIds } from './js/constants.js';
+import { boardLen, cellCount, cssClasses, machineMoveDelays, playerRoleTransitions, playerTypeIconIds } from './js/constants.js';
 import { boardCells, documentStyles, gameOverModal, mainClassList, startBtn } from './js/dom-objects.js';
 import { CalculatedMove, getPlaceStr, getRandomInt, Player } from './js/helper-functions.js';
 
@@ -52,17 +52,7 @@ players.forEach(
             endGame();
         }
 
-        switch (player.controllerType) {
-            case 'inactive':
-                setPlayerRole(player, 'robot');
-                break;
-            case 'robot':
-                setPlayerRole(player, 'human');
-                break;
-            case 'human':
-                setPlayerRole(player, 'inactive');
-                break;
-        }
+        setPlayerRole(player, playerRoleTransitions[player.controllerType]);
     })
 );
 startBtn.addEventListener('click', () => {
@@ -189,8 +179,8 @@ function getPossibleMoves(pieceId) {
             isPieceNotAtRBorder ? pieceId - 2 * boardLen + 1 : -1,
             isPieceNotAtRBorder ? pieceId + 2 * boardLen + 1 : -1,
         ];
-    const nextTo = neighborCells.filter(findFreeCells);
-    const oneOff = cellsOneOff.filter(findFreeCells);
+    const nextTo = neighborCells.filter(findValidMoveTargets);
+    const oneOff = cellsOneOff.filter(findValidMoveTargets);
 
     return { nextTo, oneOff };
 }
@@ -477,8 +467,10 @@ function computerMove(possibleMoves) {
     animationRequestId = requestAnimationFrame(highlightSelectedPiece);
 }
 
-function findFreeCells(cellId) {
-    return cellId >= 0 && cellId < board.length && board[cellId] === 0;
+function findValidMoveTargets(cellId) {
+    return cellId >= 0
+        && cellId < board.length
+        && board[cellId] === 0;
 }
 
 /** Return array of ids of cells surounding the given cell, occupied by non-active players. */

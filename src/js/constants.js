@@ -21,3 +21,8 @@ export const machineMoveDelays = {
     makeMove: 500,
     finalize: 200
 };
+export const playerRoleTransitions = {
+    inactive: 'robot',
+    robot: 'human',
+    human: 'inactive'
+};
