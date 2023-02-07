@@ -16,9 +16,9 @@ export const playerTypeIconIds = {
     inactive: '#no-player'
 };
 export const machineMoveDelays = {
-    highlightStart: 200,
-    highlightEnd: 400,
-    makeMove: 500,
+    highlightStart: 300,
+    highlightEnd: 500,
+    makeMove: 700,
     finalize: 200
 };
 export const playerRoleTransitions = {
