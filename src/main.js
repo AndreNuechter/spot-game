@@ -56,15 +56,6 @@ players.forEach(
     })
 );
 startBtn.addEventListener('click', () => {
-    idsOfActivePlayers = players.reduce((ids, player) => {
-        if (player.controllerType !== 'inactive') {
-            ids.push(player.playerId);
-        }
-        return ids;
-    }, []);
-
-    if (idsOfActivePlayers.length < 2) return;
-
     if (mainClassList.contains(cssClasses.gameIsRunning)) {
         endGame();
     }
@@ -73,7 +64,6 @@ startBtn.addEventListener('click', () => {
 });
 
 function endGame() {
-    turn = 0;
     mainClassList.remove(cssClasses.gameIsRunning);
     players.forEach(player => player.roleChangeButton.classList.remove(cssClasses.activePlayer));
     abortControllers.selectMovablePiece.abort();
@@ -83,6 +73,16 @@ function endGame() {
 }
 
 function startGame() {
+    idsOfActivePlayers = players.reduce((ids, player) => {
+        if (player.controllerType !== 'inactive') {
+            ids.push(player.playerId);
+        }
+        return ids;
+    }, []);
+
+    if (idsOfActivePlayers.length < 2) return;
+
+    turn = 0;
     clearBoard();
     mainClassList.add(cssClasses.gameIsRunning);
     idsOfActivePlayers.forEach((idOfActivePlayer) => {
@@ -410,8 +410,10 @@ function computerMove(possibleMoves) {
     const moveMadeAt = endChosenAt + machineMoveDelays.highlightEnd;
     const turnEndedAt = moveMadeAt + machineMoveDelays.finalize;
     // phase 4) finalize the move
-    const finalizeMove = (timestamp) => {
-        if (timestamp - turnEndedAt >= machineMoveDelays.finalize) {
+    const finalizeMove = partialMachineMove(
+        turnEndedAt,
+        machineMoveDelays.finalize,
+        () => {
             // if the player jumped, rm the original piece
             if (move.type === 0) {
                 clearCell(move.origin);
@@ -420,18 +422,19 @@ function computerMove(possibleMoves) {
             // rm highlighting
             boardCells[move.origin].classList.remove(cssClasses.selectedForMove);
             boardCells[move.target].classList.remove(cssClasses.highlightedTargetCell);
-            animationRequestId = requestAnimationFrame(endTurn);
-        } else {
-            animationRequestId = requestAnimationFrame(finalizeMove);
-        }
-    };
+        },
+        endTurn
+    );
     // phase 3) make the move
-    const makeMove = (timestamp) => {
-        if (timestamp - moveMadeAt >= machineMoveDelays.makeMove) {
+    const makeMove = partialMachineMove(
+        moveMadeAt,
+        machineMoveDelays.makeMove,
+        () => {
             [move.target, ...move.bounty].forEach((cellId) => {
                 // Place piece in chosen cell
-                if (board[cellId] === 0) player.pieces.push(cellId);
-                else {
+                if (board[cellId] === 0) {
+                    player.pieces.push(cellId);
+                } else {
                     const owner = players[board[cellId] - 1];
                     // Flip neighboring enemy pieces
                     player.pieces.push(...owner.pieces.splice(owner.pieces.indexOf(cellId), 1));
@@ -440,29 +443,23 @@ function computerMove(possibleMoves) {
                 board[cellId] = player.playerId;
                 boardCells[cellId].dataset.ownerId = player.playerId;
             });
-            animationRequestId = requestAnimationFrame(finalizeMove);
-        } else {
-            animationRequestId = requestAnimationFrame(makeMove);
-        }
-    };
+        },
+        finalizeMove
+    );
     // phase 2) highlight the target cell
-    const highlightSelectedCell = (timestamp) => {
-        if (timestamp - endChosenAt >= machineMoveDelays.highlightEnd) {
-            boardCells[move.target].classList.add(cssClasses.highlightedTargetCell);
-            animationRequestId = requestAnimationFrame(makeMove);
-        } else {
-            animationRequestId = requestAnimationFrame(highlightSelectedCell);
-        }
-    };
+    const highlightSelectedCell = partialMachineMove(
+        endChosenAt,
+        machineMoveDelays.highlightEnd,
+        () => boardCells[move.target].classList.add(cssClasses.highlightedTargetCell),
+        makeMove
+    );
     // phase 1) highlight the selected piece
-    const highlightSelectedPiece = (timestamp) => {
-        if (timestamp - startChosenAt >= machineMoveDelays.highlightStart) {
-            boardCells[move.origin].classList.add(cssClasses.selectedForMove);
-            animationRequestId = requestAnimationFrame(highlightSelectedCell);
-        } else {
-            animationRequestId = requestAnimationFrame(highlightSelectedPiece);
-        }
-    };
+    const highlightSelectedPiece = partialMachineMove(
+        startChosenAt,
+        machineMoveDelays.highlightStart,
+        () => boardCells[move.origin].classList.add(cssClasses.selectedForMove),
+        highlightSelectedCell
+    );
 
     animationRequestId = requestAnimationFrame(highlightSelectedPiece);
 }
@@ -499,4 +496,17 @@ function removeHighlightFromTargetCells({ moves: { nextTo, oneOff } }) {
     [...nextTo, ...oneOff].forEach(
         (cellId) => boardCells[cellId].classList.remove(cssClasses.clickableCell)
     );
+}
+
+function partialMachineMove(startTime, delay, action, nextStep) {
+    const callback = (timestamp) => {
+        if (timestamp - startTime >= delay) {
+            action();
+            animationRequestId = requestAnimationFrame(nextStep);
+        } else {
+            animationRequestId = requestAnimationFrame(callback);
+        }
+    };
+
+    return callback;
 }
