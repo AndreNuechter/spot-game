@@ -4,10 +4,6 @@ import { boardLen, cellCount, cssClasses, machineMoveDelays, playerRoleTransitio
 import { boardCells, documentStyles, gameOverModal, mainClassList, startBtn } from './js/dom-objects.js';
 import { CalculatedMove, getPlaceStr, getRandomInt, Player } from './js/helper-functions.js';
 
-// TODO rework colors...
-// semantic vars for css colors
-// gradient for bg
-
 /** `boardLen`^2 length array of cellIds meant for keeping track of cell-ownership.
  * 0 means a cell is unoccupied and otherwise the cell belongs to the player w that id. */
 const board = new Array(cellCount).fill(0);
