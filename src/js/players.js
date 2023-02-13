@@ -30,6 +30,7 @@ export const players = [
 ];
 /** List of 1-based ids of playing players */
 export let idsOfActivePlayers = [];
+
 export function updateActivePlayers() {
     idsOfActivePlayers = players.reduce((ids, player) => {
         if (player.controllerType !== 'inactive') {
@@ -38,12 +39,15 @@ export function updateActivePlayers() {
         return ids;
     }, []);
 }
+
 export function updatePieceCount(player) {
     setPlayerSelectButtonText(player, player.pieces.length);
 }
+
 export function setPlayerSelectButtonText(player, text) {
     player.roleChangeButton.children[1].textContent = text;
 }
+
 export function setPlayerRole(player, newRole) {
     player.controllerType = newRole;
     player.roleChangeButton.children[0].firstElementChild.setAttribute(

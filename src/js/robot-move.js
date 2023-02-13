@@ -89,14 +89,13 @@ export default function robotMove(possibleMoves) {
     const move = bestMoves[1][getRandomInt(0, bestMoves[1].length - 1)];
     // to make it easier to follow the computer,
     // we delay the different phases of the move
-    const startChosenAt = performance.now();
-    const endChosenAt = startChosenAt + robotMoveDelays.highlightStart;
-    const moveMadeAt = endChosenAt + robotMoveDelays.highlightEnd;
+    const movablePieceChosenAt = performance.now() + robotMoveDelays.highlightStart;
+    const targetCellChosenAt = movablePieceChosenAt + robotMoveDelays.highlightEnd;
+    const moveMadeAt = targetCellChosenAt + robotMoveDelays.finalize;
     const turnEndedAt = moveMadeAt + robotMoveDelays.finalize;
     // phase 4) finalize the move
     const finalizeMove = partialRobotMove(
         turnEndedAt,
-        robotMoveDelays.finalize,
         () => {
             // if the player jumped, rm the original piece
             if (move.type === 0) {
@@ -112,7 +111,6 @@ export default function robotMove(possibleMoves) {
     // phase 3) make the move
     const makeMove = partialRobotMove(
         moveMadeAt,
-        robotMoveDelays.makeMove,
         () => {
             [move.target, ...move.bounty].forEach((cellId) => {
                 // Place piece in chosen cell
@@ -132,15 +130,13 @@ export default function robotMove(possibleMoves) {
     );
     // phase 2) highlight the target cell
     const highlightSelectedCell = partialRobotMove(
-        endChosenAt,
-        robotMoveDelays.highlightEnd,
+        targetCellChosenAt,
         () => boardCells[move.target].classList.add(cssClasses.highlightedTargetCell),
         makeMove,
     );
     // phase 1) highlight the selected piece
     const highlightSelectedPiece = partialRobotMove(
-        startChosenAt,
-        robotMoveDelays.highlightStart,
+        movablePieceChosenAt,
         () => boardCells[move.origin].classList.add(cssClasses.selectedForMove),
         highlightSelectedCell,
     );
@@ -148,9 +144,9 @@ export default function robotMove(possibleMoves) {
     startAnimation(highlightSelectedPiece);
 }
 
-function partialRobotMove(startTime, delay, action, nextStep) {
+function partialRobotMove(scheduledTime, action, nextStep) {
     const currentStep = (timestamp) => {
-        if (timestamp - startTime >= delay) {
+        if (timestamp >= scheduledTime) {
             action();
             startAnimation(nextStep);
         } else {
