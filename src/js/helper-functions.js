@@ -3,7 +3,7 @@ export function CalculatedMove(origin, target, bounty, type) {
         origin,
         target,
         bounty,
-        type
+        type,
     };
 }
 
@@ -32,6 +32,6 @@ export function Player(color, controllerType, startPosition, playerId) {
         playerId,
         /** Will contain ids of boardCells belonging to that player */
         pieces: [],
-        roleChangeButton: document.getElementById(`plr${playerId}`)
+        roleChangeButton: document.getElementById(`plr${playerId}`),
     };
 }

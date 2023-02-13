@@ -13,16 +13,16 @@ export const cssClasses = {
 export const playerTypeIconIds = {
     human: '#human-player',
     robot: '#ai-player',
-    inactive: '#no-player'
+    inactive: '#no-player',
 };
-export const machineMoveDelays = {
+export const robotMoveDelays = {
     highlightStart: 300,
     highlightEnd: 500,
     makeMove: 700,
-    finalize: 200
+    finalize: 200,
 };
 export const playerRoleTransitions = {
     inactive: 'robot',
     robot: 'human',
-    human: 'inactive'
+    human: 'inactive',
 };

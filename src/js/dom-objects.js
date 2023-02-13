@@ -11,6 +11,7 @@ const circleTmpl = document.createElementNS(
     'http://www.w3.org/2000/svg',
     'circle',
 );
+
 circleTmpl.setAttribute('r', '16');
 
 for (let i = 0; i < boardLen; i += 1) {
