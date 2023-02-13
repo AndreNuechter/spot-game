@@ -2,7 +2,6 @@ import { idsOfActivePlayers, players } from './players.js';
 import { endTurn, turn } from './turn.js';
 import { boardCells } from './dom-objects.js';
 import { cssClasses } from './constants.js';
-import { removeHighlightFromTargetCells } from './move.js';
 import { clearCell } from './board.js';
 import board from './board.js';
 import getEnemyNeighbors from './get-enemy-neighbors.js';
@@ -35,10 +34,10 @@ export default function humanMove(possibleMoves) {
 
     // allow selection of movable pieces
     possibleMoves.forEach((possibleMove) => {
-        const movableCell = boardCells[possibleMove.pieceId];
+        const movablePiece = boardCells[possibleMove.pieceId];
 
-        movableCell.classList.add(cssClasses.clickableCell);
-        movableCell.addEventListener(
+        movablePiece.classList.add(cssClasses.clickableCell);
+        movablePiece.addEventListener(
             'click',
             ({ target: { classList: classListOfClickedPiece } }) => {
                 // clicked on previously selected movable-piece
@@ -46,46 +45,17 @@ export default function humanMove(possibleMoves) {
                     // remove highlighting from selected piece
                     classListOfClickedPiece.remove(cssClasses.selectedForMove);
                     removeHighlightFromTargetCells(possibleMove);
+                    abortControllers.selectReachableFreeCell.abort();
                     // re-allow pointing at other movable pieces
                     possibleMoves.forEach(
-                        (possibleMove) =>
-                            boardCells[possibleMove.pieceId].classList.replace(
+                        ({ pieceId }) =>
+                            boardCells[pieceId].classList.replace(
                                 cssClasses.disabledCell,
                                 cssClasses.clickableCell,
                             ),
                     );
                 } else {
-                    const finalizeMoveToCell = (idOfTargetCell) => {
-                        // take ownership of target cell
-                        board[idOfTargetCell] = player.playerId;
-                        boardCells[idOfTargetCell].dataset.ownerId = player.playerId;
-                        // flip neighbouring enemy pieces
-                        getEnemyNeighbors(idOfTargetCell).forEach((idOfGainedPiece) => {
-                            const previousOwner = players[board[idOfGainedPiece] - 1];
-                            // remove piece from current owner and give it to player
-                            player.pieces.push(
-                                ...previousOwner.pieces.splice(
-                                    previousOwner.pieces.indexOf(idOfGainedPiece),
-                                    1,
-                                ),
-                            );
-                            // update internal board state
-                            board[idOfGainedPiece] = player.playerId;
-                            // update display
-                            boardCells[idOfGainedPiece].dataset.ownerId = player.playerId;
-                        });
-                        disableHumanInput();
-                        possibleMoves.forEach(
-                            (possibleMove) =>
-                                boardCells[possibleMove.pieceId].classList.remove(
-                                    cssClasses.disabledCell,
-                                    cssClasses.clickableCell,
-                                    cssClasses.selectedForMove,
-                                ),
-                        );
-                        removeHighlightFromTargetCells(possibleMove);
-                        endTurn();
-                    };
+                    abortControllers.selectReachableFreeCell = new AbortController();
 
                     // mark piece as selected
                     classListOfClickedPiece.add(cssClasses.selectedForMove);
@@ -107,7 +77,7 @@ export default function humanMove(possibleMoves) {
                             () => {
                                 // player gains a new piece at the target-cell
                                 player.pieces.push(cellId);
-                                finalizeMoveToCell(cellId);
+                                finalizeMoveToCell(player, cellId, possibleMoves, possibleMove);
                             },
                             { signal: abortControllers.selectReachableFreeCell.signal },
                         );
@@ -120,7 +90,7 @@ export default function humanMove(possibleMoves) {
                                 // player moves the origin-piece to the target-cell
                                 player.pieces[player.pieces.indexOf(possibleMove.pieceId)] = cellId;
                                 clearCell(possibleMove.pieceId);
-                                finalizeMoveToCell(cellId);
+                                finalizeMoveToCell(player, cellId, possibleMoves, possibleMove);
                             },
                             { signal: abortControllers.selectReachableFreeCell.signal },
                         );
@@ -130,6 +100,39 @@ export default function humanMove(possibleMoves) {
             { signal: abortControllers.selectMovablePiece.signal },
         );
     });
+}
+
+function finalizeMoveToCell(player, idOfTargetCell, possibleMoves, chosenMove) {
+    // take ownership of target cell
+    board[idOfTargetCell] = player.playerId;
+    boardCells[idOfTargetCell].dataset.ownerId = player.playerId;
+    // flip neighbouring enemy pieces
+    getEnemyNeighbors(idOfTargetCell).forEach((idOfGainedPiece) => {
+        const previousOwner = players[board[idOfGainedPiece] - 1];
+        // remove piece from current owner and give it to player
+        player.pieces.push(
+            ...previousOwner.pieces.splice(
+                previousOwner.pieces.indexOf(idOfGainedPiece),
+                1,
+            ),
+        );
+        // update internal board state
+        board[idOfGainedPiece] = player.playerId;
+        // update display
+        boardCells[idOfGainedPiece].dataset.ownerId = player.playerId;
+    });
+    disableHumanInput();
+    // reset look of movable pieces
+    possibleMoves.forEach(
+        ({ pieceId }) =>
+            boardCells[pieceId].classList.remove(
+                cssClasses.disabledCell,
+                cssClasses.clickableCell,
+                cssClasses.selectedForMove,
+            ),
+    );
+    removeHighlightFromTargetCells(chosenMove);
+    endTurn();
 }
 
 function removeHighlightFromTargetCells({ moves: { nextTo, oneOff } }) {
