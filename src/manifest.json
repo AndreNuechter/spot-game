@@ -3,8 +3,9 @@
     "short_name": "spotGame",
     "start_url": "./",
     "display": "standalone",
-    "theme_color": "#000000",
-    "background_color": "#8fe9aa",
+    "theme_color": "#f5f5dc",
+    "orientation": "portrait",
+    "background_color": "#f5f5dc",
     "icons": [{
         "src": "./images/icons-192.png",
         "type": "image/png",
