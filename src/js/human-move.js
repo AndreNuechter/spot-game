@@ -11,13 +11,6 @@ const abortControllers = {
     selectReachableFreeCell: new AbortController(),
 };
 
-function resetAbortControllers() {
-    Object.assign(abortControllers, {
-        selectMovablePiece: new AbortController(),
-        selectReachableFreeCell: new AbortController(),
-    });
-}
-
 export function disableHumanInput() {
     abortControllers.selectMovablePiece.abort();
     abortControllers.selectReachableFreeCell.abort();
@@ -30,7 +23,7 @@ export function disableHumanInput() {
 export default function humanMove(possibleMoves) {
     const player = players[idsOfActivePlayers[turn] - 1];
 
-    resetAbortControllers();
+    abortControllers.selectMovablePiece = new AbortController();
 
     // allow selection of movable pieces
     possibleMoves.forEach((possibleMove) => {
